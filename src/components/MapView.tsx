@@ -54,31 +54,65 @@ export function MapView({ places, selectedPlace, selectedCategories, onMarkerCli
     kakaoMapRef.current.setLevel(centerOn.level);
   }, [centerOn]);
 
-  const searchNearbyPlace = (lat: number, lng: number) => {
-    if (!window.kakao?.maps?.services) return;
+  // SDK Places 서비스 사용 (services 라이브러리 필요)
+  const searchWithSDK = (lat: number, lng: number): boolean => {
+    if (!window.kakao?.maps?.services?.Places) return false;
     setSearching(true);
     setPopup(null);
     const ps = new window.kakao.maps.services.Places();
     const location = new window.kakao.maps.LatLng(lat, lng);
     let found = false;
-    const handleResult = (results: any[], status: string) => {
+
+    const handleResult = (results: any[], st: string) => {
       if (found) return;
-      if (status === window.kakao.maps.services.Status.OK && results.length > 0) {
+      if (st === window.kakao.maps.services.Status.OK && results.length > 0) {
         found = true;
         const d = results[0];
         setPopup({ name: d.place_name, address: d.road_address_name || d.address_name, url: `https://place.map.kakao.com/${d.id}` });
         setSearching(false);
       }
     };
+
     ps.categorySearch('FD6', (r: any[], s: string) => {
       handleResult(r, s);
       if (!found) {
         ps.categorySearch('CE7', (r2: any[], s2: string) => {
           handleResult(r2, s2);
-          if (!found) setSearching(false);
-        }, { location, radius: 80, size: 1 });
+          if (!found) {
+            // 음식점·카페 없으면 전체 카테고리로 확장 검색
+            ps.categorySearch('FD6', (r3: any[], s3: string) => {
+              handleResult(r3, s3);
+              if (!found) setSearching(false);
+            }, { location, radius: 300, size: 1 });
+          }
+        }, { location, radius: 150, size: 1 });
       }
-    }, { location, radius: 80, size: 1 });
+    }, { location, radius: 150, size: 1 });
+
+    return true;
+  };
+
+  // REST API fallback (services 없을 때)
+  const searchWithREST = async (lat: number, lng: number) => {
+    setSearching(true);
+    setPopup(null);
+    try {
+      const res = await fetch(
+        `https://dapi.kakao.com/v2/local/search/category.json?category_group_code=FD6,CE7&x=${lng}&y=${lat}&radius=200&size=1`,
+        { headers: { Authorization: `KakaoAK ${import.meta.env.VITE_KAKAO_REST_API_KEY}` } }
+      );
+      const data = await res.json();
+      if (data.documents?.length > 0) {
+        const d = data.documents[0];
+        setPopup({ name: d.place_name, address: d.road_address_name || d.address_name, url: `https://place.map.kakao.com/${d.id}` });
+      }
+    } catch { /* silent */ }
+    setSearching(false);
+  };
+
+  const searchNearbyPlace = (lat: number, lng: number) => {
+    const usedSDK = searchWithSDK(lat, lng);
+    if (!usedSDK) searchWithREST(lat, lng);
   };
 
   const initializeMap = () => {
@@ -92,7 +126,6 @@ export function MapView({ places, selectedPlace, selectedCategories, onMarkerCli
     kakaoMapRef.current = map;
     setStatus('완료');
 
-    // 마커 생성
     const markerItems = places.map((place) => {
       const position = new window.kakao.maps.LatLng(place.lat, place.lng);
       const marker = new window.kakao.maps.Marker({ position });
@@ -106,13 +139,15 @@ export function MapView({ places, selectedPlace, selectedCategories, onMarkerCli
     markersRef.current = markerItems;
 
     const clusterer = new (window.kakao.maps as any).MarkerClusterer({
-      map, markers: markerItems.map((m) => m.marker), gridSize: 60, minLevel: 5, disableClickZoom: false,
+      map, markers: markerItems.map((m) => m.marker),
+      gridSize: 60, minLevel: 5, disableClickZoom: false,
     });
     clustererRef.current = clusterer;
 
     window.kakao.maps.event.addListener(map, 'click', (mouseEvent: any) => {
       searchNearbyPlace(mouseEvent.latLng.getLat(), mouseEvent.latLng.getLng());
     });
+
     window.kakao.maps.event.addListener(map, 'idle', () => {
       if (!onBoundsChange) return;
       const bounds = map.getBounds();
