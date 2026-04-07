@@ -2,7 +2,7 @@ import { useState, useMemo, useCallback, useRef } from 'react';
 import { MapView } from './components/MapView';
 import { PlaceList } from './components/PlaceList';
 import { places, Place } from './data/places';
-import { MapPin, Search, X } from 'lucide-react';
+import { MapPin, Search, X, ChevronLeft, ChevronRight } from 'lucide-react';
 
 export default function App() {
   const [selectedPlace, setSelectedPlace] = useState<Place | null>(null);
@@ -11,6 +11,7 @@ export default function App() {
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [centerOn, setCenterOn] = useState<{ lat: number; lng: number; level: number } | null>(null);
   const [regionFilteredPlaces, setRegionFilteredPlaces] = useState<Place[] | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const resetRegionRef = useRef<(() => void) | null>(null);
 
   const categories = useMemo(() => {
@@ -23,14 +24,12 @@ export default function App() {
     );
   };
 
-  // 마커 클릭 시: 지역 필터 초기화 + 해당 가게 지도 표시
   const handlePlaceClick = useCallback((place: Place | null) => {
     setSelectedPlace(place);
     if (place) {
-      // 지역 필터 해제 → 지도 범위 기준으로 복귀
       setRegionFilteredPlaces(null);
-      // PlaceList 내부 지역 드롭다운도 초기화
       resetRegionRef.current?.();
+      setSidebarOpen(true); // 가게 클릭 시 사이드바 자동 열기
     }
   }, []);
 
@@ -47,7 +46,6 @@ export default function App() {
     }
   }, []);
 
-  // 리스트 기준: 지역 필터 > 지도 범위
   const baseList = regionFilteredPlaces ?? visiblePlaces;
 
   const filteredPlaces = useMemo(() => {
@@ -59,56 +57,93 @@ export default function App() {
         p.address.toLowerCase().includes(searchQuery.toLowerCase());
       return matchCat && matchSearch;
     });
-
-    // 선택된 가게가 목록에 없으면 맨 위에 추가
     if (selectedPlace && !list.find((p) => p.id === selectedPlace.id)) {
       list = [selectedPlace, ...list];
     }
-
     return list;
   }, [baseList, selectedCategories, searchQuery, selectedPlace]);
 
   return (
     <div className="h-screen w-screen overflow-hidden flex flex-col lg:flex-row">
 
-      {/* 사이드바 */}
-      <div className="lg:absolute lg:left-4 lg:top-4 lg:bottom-4 lg:w-96 lg:z-10 h-64 lg:h-auto w-full flex flex-col bg-white shadow-xl lg:rounded-xl overflow-hidden">
-        <div className="px-4 pt-3 pb-2 bg-blue-600 text-white shrink-0 flex items-center gap-2">
-          <MapPin className="w-4 h-4" />
-          <span className="font-bold text-sm">나만의 맛집 평점 지도</span>
-        </div>
-        <div className="p-3 border-b border-gray-100 shrink-0">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <input
-              type="text"
-              placeholder="식당 이름, 주소 검색"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-8 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-blue-400 focus:bg-white transition-colors"
-            />
-            {searchQuery && (
-              <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2">
-                <X className="w-4 h-4 text-gray-400 hover:text-gray-600" />
+      {/* ── 사이드바 ── */}
+      <div
+        className={`lg:absolute lg:left-4 lg:top-4 lg:bottom-4 lg:z-10 lg:h-auto flex flex-col bg-white shadow-xl lg:rounded-xl overflow-hidden transition-all duration-300 ${
+          sidebarOpen ? 'lg:w-96 h-64' : 'lg:w-12 h-12 lg:h-auto'
+        } w-full`}
+      >
+        {sidebarOpen ? (
+          <>
+            {/* 헤더 */}
+            <div className="px-4 pt-3 pb-2 bg-blue-600 text-white shrink-0 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <MapPin className="w-4 h-4" />
+                <span className="font-bold text-sm">나만의 맛집 평점 지도</span>
+              </div>
+              {/* 접기 버튼 */}
+              <button
+                onClick={() => setSidebarOpen(false)}
+                className="p-1 rounded-lg hover:bg-blue-500 transition-colors"
+                title="사이드바 접기"
+              >
+                <ChevronLeft className="w-4 h-4" />
               </button>
-            )}
-          </div>
-        </div>
-        <div className="flex-1 overflow-hidden">
-          <PlaceList
-            places={filteredPlaces}
-            totalCount={places.length}
-            onPlaceClick={handlePlaceClick}
-            selectedPlaceId={selectedPlace?.id ?? null}
-            onRegionChange={handleRegionChange}
-            onResetRegionRef={resetRegionRef}
-          />
-        </div>
+            </div>
+
+            {/* 검색바 */}
+            <div className="p-3 border-b border-gray-100 shrink-0">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="식당 이름, 주소 검색"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-9 pr-8 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-blue-400 focus:bg-white transition-colors"
+                />
+                {searchQuery && (
+                  <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2">
+                    <X className="w-4 h-4 text-gray-400 hover:text-gray-600" />
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* 리스트 */}
+            <div className="flex-1 overflow-hidden">
+              <PlaceList
+                places={filteredPlaces}
+                totalCount={places.length}
+                onPlaceClick={handlePlaceClick}
+                selectedPlaceId={selectedPlace?.id ?? null}
+                onRegionChange={handleRegionChange}
+                onResetRegionRef={resetRegionRef}
+              />
+            </div>
+          </>
+        ) : (
+          /* 접힌 상태 — 펼치기 버튼만 표시 */
+          <button
+            onClick={() => setSidebarOpen(true)}
+            className="w-full h-full bg-blue-600 hover:bg-blue-700 text-white flex flex-col items-center justify-center gap-1 transition-colors lg:rounded-xl"
+            title="사이드바 열기"
+          >
+            <ChevronRight className="w-5 h-5" />
+            <span className="text-xs font-bold hidden lg:block" style={{ writingMode: 'vertical-rl' }}>
+              맛집 목록
+            </span>
+          </button>
+        )}
       </div>
 
-      {/* 지도 영역 */}
+      {/* ── 지도 영역 ── */}
       <div className="flex-1 relative">
-        <div className="absolute top-0 left-0 right-0 z-10 bg-white/95 backdrop-blur-sm border-b border-gray-200 lg:left-[416px]">
+        {/* 카테고리 칩 */}
+        <div
+          className={`absolute top-0 right-0 z-10 bg-white/95 backdrop-blur-sm border-b border-gray-200 transition-all duration-300 ${
+            sidebarOpen ? 'left-0 lg:left-[416px]' : 'left-0 lg:left-16'
+          }`}
+        >
           <div className="flex items-center gap-2 px-3 py-2 overflow-x-auto scrollbar-hide">
             <button
               onClick={() => setSelectedCategories([])}
