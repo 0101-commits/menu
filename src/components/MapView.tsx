@@ -11,7 +11,7 @@ interface MapViewProps {
   places: Place[];
   selectedPlace: Place | null;
   selectedCategories: string[];
-  onMarkerClick: (place: Place) => void;
+  onMarkerClick: (place: Place | null) => void;
   onBoundsChange?: (visiblePlaces: Place[]) => void;
   centerOn?: { lat: number; lng: number; level: number } | null;
   categoryBarHeight?: number;
@@ -28,7 +28,8 @@ export function MapView({
   const markersRef = useRef<{ marker: any; place: Place }[]>([]);
   const overlayRef = useRef<any>(null);
   const clustererRef = useRef<any>(null);
-  const markerClickedRef = useRef(false); // 마커 클릭 전파 차단용
+  const searchTimerRef = useRef<any>(null);
+  const selectedPlaceRef = useRef<Place | null>(null);
 
   const [status, setStatus] = useState('로딩중');
   const [locating, setLocating] = useState(false);
@@ -36,6 +37,11 @@ export function MapView({
   const [searching, setSearching] = useState(false);
   const [nearbyList, setNearbyList] = useState<Place[]>([]);
   const [nearbyOpen, setNearbyOpen] = useState(false);
+
+  // selectedPlace를 ref에도 동기화 (클릭 핸들러에서 최신값 참조용)
+  useEffect(() => {
+    selectedPlaceRef.current = selectedPlace;
+  }, [selectedPlace]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -46,7 +52,6 @@ export function MapView({
     return () => clearTimeout(timer);
   }, []);
 
-  // 카테고리 변경 → 클러스터러 재생성
   useEffect(() => {
     if (!kakaoMapRef.current || markersRef.current.length === 0) return;
     if (clustererRef.current) { clustererRef.current.clear(); clustererRef.current = null; }
@@ -59,7 +64,6 @@ export function MapView({
     });
   }, [selectedCategories]);
 
-  // centerOn 변경 → 지도 이동
   useEffect(() => {
     if (!centerOn || !kakaoMapRef.current) return;
     kakaoMapRef.current.setCenter(new window.kakao.maps.LatLng(centerOn.lat, centerOn.lng));
@@ -71,39 +75,44 @@ export function MapView({
     const dLat = (lat2 - lat1) * Math.PI / 180;
     const dLng = (lng2 - lng1) * Math.PI / 180;
     const a = Math.sin(dLat / 2) ** 2 +
-      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+      Math.sin(dLng / 2) ** 2;
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   };
 
   const findNearRegistered = (lat: number, lng: number, map: any): Place[] => {
     const level = map.getLevel();
-    const radius = level <= 2 ? 20 : level <= 3 ? 40 : level <= 4 ? 80 : level <= 5 ? 150 : level <= 6 ? 300 : 500;
+    const radius = level <= 2 ? 30 : level <= 3 ? 60 : level <= 4 ? 120
+      : level <= 5 ? 250 : level <= 6 ? 500 : 800;
     return places.filter((p) => getDistanceM(lat, lng, p.lat, p.lng) < radius);
   };
 
   const searchKakao = (lat: number, lng: number) => {
-    if (!window.kakao?.maps?.services?.Places) return;
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
     setSearching(true);
     setPopup(null);
-    const ps = new window.kakao.maps.services.Places();
-    const location = new window.kakao.maps.LatLng(lat, lng);
-    let found = false;
-    const handle = (results: any[], st: string) => {
-      if (found) return;
-      if (st === window.kakao.maps.services.Status.OK && results.length > 0) {
-        found = true;
-        const d = results[0];
-        setPopup({ name: d.place_name, address: d.road_address_name || d.address_name, url: `https://place.map.kakao.com/${d.id}` });
+    searchTimerRef.current = setTimeout(() => {
+      if (!window.kakao?.maps?.services?.Places) { setSearching(false); return; }
+      const ps = new window.kakao.maps.services.Places();
+      const location = new window.kakao.maps.LatLng(lat, lng);
+      let found = false;
+      const handle = (results: any[], st: string) => {
+        if (found) return;
+        if (st === window.kakao.maps.services.Status.OK && results.length > 0) {
+          found = true;
+          const d = results[0];
+          setPopup({ name: d.place_name, address: d.road_address_name || d.address_name, url: `https://place.map.kakao.com/${d.id}` });
+        }
         setSearching(false);
-      }
-    };
-    ps.categorySearch('FD6', (r: any[], s: string) => {
-      handle(r, s);
-      if (!found) ps.categorySearch('CE7', (r2: any[], s2: string) => {
-        handle(r2, s2);
-        if (!found) setSearching(false);
+      };
+      ps.categorySearch('FD6', (r: any[], s: string) => {
+        handle(r, s);
+        if (!found) ps.categorySearch('CE7', (r2: any[], s2: string) => {
+          handle(r2, s2);
+          if (!found) setSearching(false);
+        }, { location, radius: 150, size: 1 });
       }, { location, radius: 150, size: 1 });
-    }, { location, radius: 150, size: 1 });
+    }, 400);
   };
 
   const initializeMap = () => {
@@ -118,19 +127,10 @@ export function MapView({
     kakaoMapRef.current = map;
     setStatus('완료');
 
+    // ★ 마커에 클릭 핸들러 없음 — 지도 클릭 하나로만 처리
     const markerItems = places.map((place) => {
       const marker = new window.kakao.maps.Marker({
         position: new window.kakao.maps.LatLng(place.lat, place.lng)
-      });
-      window.kakao.maps.event.addListener(marker, 'click', () => {
-        // 마커 클릭 시 플래그 세팅 → 지도 click 이벤트가 무시됨
-        markerClickedRef.current = true;
-        setTimeout(() => { markerClickedRef.current = false; }, 300);
-        // 기존 팝업 모두 닫기
-        setPopup(null);
-        setSearching(false);
-        setNearbyOpen(false);
-        onMarkerClick(place);
       });
       return { marker, place };
     });
@@ -141,23 +141,34 @@ export function MapView({
       gridSize: 60, minLevel: 5, disableClickZoom: false,
     });
 
+    // ★ 지도 클릭 하나로 모든 케이스 처리
     window.kakao.maps.event.addListener(map, 'click', (mouseEvent: any) => {
-      // 마커 클릭으로 인한 전파면 무시
-      if (markerClickedRef.current) return;
-
       const lat = mouseEvent.latLng.getLat();
       const lng = mouseEvent.latLng.getLng();
+
+      // 진행 중인 검색 취소
+      if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+
       const nearby = findNearRegistered(lat, lng, map);
 
       if (nearby.length === 1) {
+        // 등록 가게 1개 → 바로 선택
         setPopup(null); setSearching(false); setNearbyOpen(false);
         onMarkerClick(nearby[0]);
+
       } else if (nearby.length > 1) {
+        // 등록 가게 여러 개 → 선택 목록
         setNearbyList(nearby); setNearbyOpen(true);
         setPopup(null); setSearching(false);
+
+      } else if (selectedPlaceRef.current) {
+        // 빈 곳 클릭 + 오버레이 열려있음 → 오버레이만 닫기, 검색 안 함
+        setPopup(null); setSearching(false); setNearbyOpen(false);
+        onMarkerClick(null);
+
       } else {
+        // 완전히 빈 곳 → 카카오 검색
         setNearbyOpen(false);
-        // 등록 가게 없으면 카카오 검색
         searchKakao(lat, lng);
       }
     });
@@ -190,15 +201,16 @@ export function MapView({
     );
   };
 
-  // selectedPlace 변경 → overlay 표시
   useEffect(() => {
-    if (status !== '완료' || !kakaoMapRef.current || !selectedPlace) {
-      if (overlayRef.current) overlayRef.current.setMap(null);
+    if (status !== '완료' || !kakaoMapRef.current) return;
+    if (!selectedPlace) {
+      if (overlayRef.current) { overlayRef.current.setMap(null); overlayRef.current = null; }
       return;
     }
-    if (overlayRef.current) overlayRef.current.setMap(null);
-    // 팝업 모두 닫기
+    if (overlayRef.current) { overlayRef.current.setMap(null); overlayRef.current = null; }
+    // 카카오 팝업 모두 닫기
     setPopup(null); setSearching(false); setNearbyOpen(false);
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
 
     const position = new window.kakao.maps.LatLng(selectedPlace.lat, selectedPlace.lng);
     kakaoMapRef.current.setCenter(position);
@@ -206,8 +218,12 @@ export function MapView({
     overlayContent.style.position = 'relative';
     overlayContent.style.bottom = '50px';
     const root = createRoot(overlayContent);
-    root.render(<PlaceInfoWindow place={selectedPlace} onClose={() => onMarkerClick(null as any)} />);
-    const customOverlay = new window.kakao.maps.CustomOverlay({ position, content: overlayContent, yAnchor: 1 });
+    root.render(
+      <PlaceInfoWindow place={selectedPlace} onClose={() => onMarkerClick(null)} />
+    );
+    const customOverlay = new window.kakao.maps.CustomOverlay({
+      position, content: overlayContent, yAnchor: 1
+    });
     customOverlay.setMap(kakaoMapRef.current);
     overlayRef.current = customOverlay;
   }, [selectedPlace, status]);
@@ -218,7 +234,6 @@ export function MapView({
         <div ref={mapRef} className="w-full h-full" />
       </div>
 
-      {/* 겹치는 가게 선택 목록 */}
       {nearbyOpen && nearbyList.length > 0 && (
         <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-30 bg-white rounded-xl shadow-xl border border-gray-200 w-72">
           <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100">
@@ -245,7 +260,6 @@ export function MapView({
         </div>
       )}
 
-      {/* 카카오 주변 검색 팝업 */}
       {(popup || searching) && (
         <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-20 bg-white rounded-xl shadow-xl border border-gray-200 p-4 min-w-[260px] max-w-[320px]">
           {searching ? (
@@ -276,11 +290,9 @@ export function MapView({
         </div>
       )}
 
-      {/* 현재 위치 버튼 */}
       {status === '완료' && (
         <button onClick={moveToCurrentLocation} disabled={locating}
-          className="absolute bottom-16 right-4 z-10 bg-white rounded-full shadow-lg p-3 hover:bg-gray-50 transition-colors border border-gray-200 disabled:opacity-50"
-          title="현재 위치로 이동">
+          className="absolute bottom-16 right-4 z-10 bg-white rounded-full shadow-lg p-3 hover:bg-gray-50 transition-colors border border-gray-200 disabled:opacity-50">
           {locating ? (
             <svg className="w-5 h-5 text-blue-500 animate-spin" fill="none" viewBox="0 0 24 24">
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
