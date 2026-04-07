@@ -54,30 +54,26 @@ export default function App() {
 
   const baseList = regionFilteredPlaces ?? visiblePlaces;
 
+  const [globalSearch, setGlobalSearch] = useState(false);
+
   const filteredPlaces = useMemo(() => {
-    // 가게 선택 시 → 전체 데이터에서 거리순
-    if (selectedPlace) {
-      return places
-        .map((p) => ({ ...p, dist: haversine(selectedPlace.lat, selectedPlace.lng, p.lat, p.lng) }))
-        .filter((p) => {
-          const matchCat = selectedCategories.length === 0 || selectedCategories.includes(p.category);
-          const matchSearch = searchQuery.trim() === '' ||
-            p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            p.address.toLowerCase().includes(searchQuery.toLowerCase());
-          return matchCat && matchSearch;
-        })
-        .sort((a, b) => a.dist - b.dist)
-        .map(({ dist: _dist, ...p }) => p as Place);
-    }
-    // 기본 → 지도 범위 / 지역 필터
-    return baseList.filter((p) => {
-      const matchCat = selectedCategories.length === 0 || selectedCategories.includes(p.category);
-      const matchSearch = searchQuery.trim() === '' ||
-        p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        p.address.toLowerCase().includes(searchQuery.toLowerCase());
-      return matchCat && matchSearch;
-    });
-  }, [baseList, selectedCategories, searchQuery, selectedPlace]);
+    const searchList = (globalSearch && searchQuery.trim()) ? places : (selectedPlace ? places : baseList);
+
+    return searchList
+      .map((p) => ({
+        ...p,
+        dist: selectedPlace ? haversine(selectedPlace.lat, selectedPlace.lng, p.lat, p.lng) : 0,
+      }))
+      .filter((p) => {
+        const matchCat = selectedCategories.length === 0 || selectedCategories.includes(p.category);
+        const matchSearch = searchQuery.trim() === '' ||
+          p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          p.address.toLowerCase().includes(searchQuery.toLowerCase());
+        return matchCat && matchSearch;
+      })
+      .sort((a, b) => selectedPlace ? a.dist - b.dist : 0)
+      .map(({ dist: _dist, ...p }) => p as Place);
+  }, [baseList, selectedCategories, searchQuery, selectedPlace, globalSearch]);
 
   return (
     <div className="h-screen w-screen overflow-hidden relative">
@@ -131,21 +127,14 @@ export default function App() {
             </button>
           </div>
 
-          {/* 전체 식당 검색창 */}
+          {/* 검색창 */}
           <div className="p-3 border-b border-gray-100 shrink-0">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <input type="text" placeholder="전체 식당 이름, 주소 검색"
+              <input type="text"
+                placeholder={globalSearch ? "전체 식당 검색..." : "현재 지도 범위에서 검색..."}
                 value={searchQuery}
-                onChange={(e) => {
-                  setSearchQuery(e.target.value);
-                  // 검색 시 지역 필터 해제 → 전체 데이터 검색
-                  if (e.target.value.trim()) {
-                    setRegionFilteredPlaces(null);
-                    resetRegionRef.current?.();
-                    setSelectedPlace(null);
-                  }
-                }}
+                onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full pl-9 pr-8 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-blue-400 focus:bg-white transition-colors" />
               {searchQuery && (
                 <button onClick={() => setSearchQuery('')}
@@ -154,11 +143,22 @@ export default function App() {
                 </button>
               )}
             </div>
-            {searchQuery.trim() && (
-              <p className="text-xs text-blue-500 mt-1.5 pl-1">
-                전체 {places.length}개 식당에서 검색 중
-              </p>
-            )}
+            {/* 전체 검색 토글 */}
+            <button
+              onClick={() => setGlobalSearch((v) => !v)}
+              className={`mt-2 w-full flex items-center justify-center gap-2 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+                globalSearch
+                  ? 'bg-blue-600 text-white border-blue-600'
+                  : 'bg-white text-gray-500 border-gray-200 hover:border-blue-300 hover:text-blue-500'
+              }`}
+            >
+              <span className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${
+                globalSearch ? 'bg-white border-white' : 'border-gray-400'
+              }`}>
+                {globalSearch && <svg className="w-3 h-3 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7"/></svg>}
+              </span>
+              전체 식당 검색 ({places.length.toLocaleString()}개)
+            </button>
           </div>
 
           <div className="flex-1 overflow-hidden">
