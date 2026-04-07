@@ -52,15 +52,14 @@ export function MapView({
   }, []);
 
   useEffect(() => {
-    if (!kakaoMapRef.current || markersRef.current.length === 0) return;
-    if (clustererRef.current) { clustererRef.current.clear(); clustererRef.current = null; }
-    const filtered = markersRef.current
+    if (!clustererRef.current || markersRef.current.length === 0) return;
+    const allMarkers = markersRef.current.map(({ marker }) => marker);
+    const filteredMarkers = markersRef.current
       .filter(({ place }) => selectedCategories.length === 0 || selectedCategories.includes(place.category))
       .map(({ marker }) => marker);
-    clustererRef.current = new (window.kakao.maps as any).MarkerClusterer({
-      map: kakaoMapRef.current, markers: filtered,
-      gridSize: 60, minLevel: 5, disableClickZoom: false,
-    });
+    // 클러스터러 인스턴스 유지 — 마커만 교체 (파괴/재생성 시 충돌 발생)
+    clustererRef.current.removeMarkers(allMarkers, true);
+    clustererRef.current.addMarkers(filteredMarkers);
   }, [selectedCategories]);
 
   useEffect(() => {
