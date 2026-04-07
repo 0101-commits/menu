@@ -10,7 +10,7 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [centerOn, setCenterOn] = useState<{ lat: number; lng: number; level: number } | null>(null);
-  const [regionActive, setRegionActive] = useState(false); // 지역 필터 활성 여부
+  const [regionFilteredPlaces, setRegionFilteredPlaces] = useState<Place[] | null>(null);
 
   const categories = useMemo(() => {
     return Array.from(new Set(places.map((p) => p.category))).sort();
@@ -22,9 +22,7 @@ export default function App() {
     );
   };
 
-  const clearCategories = () => setSelectedCategories([]);
-
-  // 지역 필터 선택 시 전체 데이터에서 필터링 + 지도 이동
+  // 지역 필터 변경: 해당 지역 가게만 리스트에 표시 + 지도 이동
   const handleRegionChange = useCallback((
     filtered: Place[],
     lat: number | null,
@@ -32,14 +30,14 @@ export default function App() {
   ) => {
     if (lat !== null && lng !== null) {
       setCenterOn({ lat, lng, level: 7 });
-      setRegionActive(true);
+      setRegionFilteredPlaces(filtered); // 해당 지역 가게만
     } else {
-      setRegionActive(false);
+      setRegionFilteredPlaces(null); // 초기화 시 지도 범위로 복귀
     }
   }, []);
 
-  // 리스트에 보여줄 데이터: 지역 필터 시 전체, 아니면 지도 범위
-  const baseList = regionActive ? places : visiblePlaces;
+  // 리스트 기준: 지역 필터 > 지도 범위
+  const baseList = regionFilteredPlaces ?? visiblePlaces;
 
   const filteredPlaces = useMemo(() => {
     return baseList.filter((p) => {
@@ -55,16 +53,12 @@ export default function App() {
   return (
     <div className="h-screen w-screen overflow-hidden flex flex-col lg:flex-row">
 
-      {/* ── 사이드바 ── */}
+      {/* 사이드바 */}
       <div className="lg:absolute lg:left-4 lg:top-4 lg:bottom-4 lg:w-96 lg:z-10 h-64 lg:h-auto w-full flex flex-col bg-white shadow-xl lg:rounded-xl overflow-hidden">
-
-        {/* 타이틀 */}
         <div className="px-4 pt-3 pb-2 bg-blue-600 text-white shrink-0 flex items-center gap-2">
           <MapPin className="w-4 h-4" />
           <span className="font-bold text-sm">나만의 맛집 평점 지도</span>
         </div>
-
-        {/* 검색바 */}
         <div className="p-3 border-b border-gray-100 shrink-0">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -82,8 +76,6 @@ export default function App() {
             )}
           </div>
         </div>
-
-        {/* 리스트 */}
         <div className="flex-1 overflow-hidden">
           <PlaceList
             places={filteredPlaces}
@@ -95,15 +87,13 @@ export default function App() {
         </div>
       </div>
 
-      {/* ── 지도 영역 ── */}
+      {/* 지도 영역 */}
       <div className="flex-1 relative">
-
-        {/* 카테고리 칩 — 지도 상단 (사이드바 오른쪽부터 시작) */}
+        {/* 카테고리 칩 */}
         <div className="absolute top-0 left-0 right-0 z-10 bg-white/95 backdrop-blur-sm border-b border-gray-200 lg:left-[416px]">
           <div className="flex items-center gap-2 px-3 py-2 overflow-x-auto scrollbar-hide">
-            {/* 전체 초기화 버튼 */}
             <button
-              onClick={clearCategories}
+              onClick={() => setSelectedCategories([])}
               className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold transition-all border ${
                 selectedCategories.length === 0
                   ? 'bg-blue-600 text-white border-blue-600'
@@ -122,10 +112,7 @@ export default function App() {
                     : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
                 }`}
               >
-                {cat}
-                {selectedCategories.includes(cat) && (
-                  <span className="ml-1 opacity-80">✓</span>
-                )}
+                {cat}{selectedCategories.includes(cat) && ' ✓'}
               </button>
             ))}
           </div>
@@ -135,7 +122,7 @@ export default function App() {
           places={places}
           selectedPlace={selectedPlace}
           onMarkerClick={setSelectedPlace}
-          onBoundsChange={(vp) => { if (!regionActive) setVisiblePlaces(vp); }}
+          onBoundsChange={(vp) => { if (!regionFilteredPlaces) setVisiblePlaces(vp); }}
           centerOn={centerOn}
         />
       </div>
