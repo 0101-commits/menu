@@ -50,13 +50,9 @@ export default function App() {
   const baseList = regionFilteredPlaces ?? visiblePlaces;
 
   const filteredPlaces = useMemo(() => {
-    // 가게 클릭 시 → 해당 가게 + 거리순 주변 가게
     if (selectedPlace) {
-      const withDist = places
-        .map((p) => ({
-          ...p,
-          dist: haversine(selectedPlace.lat, selectedPlace.lng, p.lat, p.lng),
-        }))
+      return places
+        .map((p) => ({ ...p, dist: haversine(selectedPlace.lat, selectedPlace.lng, p.lat, p.lng) }))
         .filter((p) => {
           const matchCat = selectedCategories.length === 0 || selectedCategories.includes(p.category);
           const matchSearch = searchQuery.trim() === '' ||
@@ -64,12 +60,9 @@ export default function App() {
             p.address.toLowerCase().includes(searchQuery.toLowerCase());
           return matchCat && matchSearch;
         })
-        .sort((a, b) => a.dist - b.dist);
-
-      return withDist.map(({ dist: _dist, ...p }) => p as Place);
+        .sort((a, b) => a.dist - b.dist)
+        .map(({ dist: _dist, ...p }) => p as Place);
     }
-
-    // 기본: 지역/지도 범위 필터
     return baseList.filter((p) => {
       const matchCat = selectedCategories.length === 0 || selectedCategories.includes(p.category);
       const matchSearch = searchQuery.trim() === '' ||
@@ -82,62 +75,71 @@ export default function App() {
   return (
     <div className="h-screen w-screen overflow-hidden flex flex-col lg:flex-row">
 
-      {/* ── 사이드바 (위로 접힘) ── */}
-      <div className={`lg:absolute lg:left-4 lg:top-4 lg:z-10 lg:w-96 w-full flex flex-col bg-white shadow-xl lg:rounded-xl overflow-hidden transition-all duration-300 ${
-        sidebarOpen ? 'lg:bottom-4 h-64 lg:h-auto' : 'h-12 lg:h-12'
-      }`}>
-
-        {/* 헤더 (항상 표시) */}
-        <div
-          className="px-4 py-3 bg-blue-600 text-white shrink-0 flex items-center justify-between cursor-pointer select-none"
-          onClick={() => setSidebarOpen((o) => !o)}
-        >
-          <div className="flex items-center gap-2">
-            <MapPin className="w-4 h-4" />
-            <span className="font-bold text-sm">나만의 맛집 평점 지도</span>
-            <span className="text-blue-200 text-xs">({filteredPlaces.length}개)</span>
+      {/* ── 사이드바 (열린 상태) ── */}
+      {sidebarOpen && (
+        <div className="lg:absolute lg:left-4 lg:top-4 lg:bottom-4 lg:z-10 lg:w-96 w-full h-64 lg:h-auto flex flex-col bg-white shadow-xl lg:rounded-xl overflow-hidden">
+          <div className="px-4 py-3 bg-blue-600 text-white shrink-0 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <MapPin className="w-4 h-4" />
+              <span className="font-bold text-sm">나만의 맛집 평점 지도</span>
+              <span className="text-blue-200 text-xs">({filteredPlaces.length}개)</span>
+            </div>
+            <button
+              onClick={() => setSidebarOpen(false)}
+              className="p-1 rounded-lg hover:bg-blue-500 transition-colors"
+              title="접기"
+            >
+              <ChevronUp className="w-4 h-4" />
+            </button>
           </div>
-          {sidebarOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-        </div>
-
-        {/* 내용 — 접히면 숨김 */}
-        {sidebarOpen && (
-          <>
-            <div className="p-3 border-b border-gray-100 shrink-0">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                <input
-                  type="text"
-                  placeholder="식당 이름, 주소 검색"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-9 pr-8 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-blue-400 focus:bg-white transition-colors"
-                />
-                {searchQuery && (
-                  <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2">
-                    <X className="w-4 h-4 text-gray-400 hover:text-gray-600" />
-                  </button>
-                )}
-              </div>
-            </div>
-            <div className="flex-1 overflow-hidden">
-              <PlaceList
-                places={filteredPlaces}
-                totalCount={places.length}
-                onPlaceClick={handlePlaceClick}
-                selectedPlaceId={selectedPlace?.id ?? null}
-                selectedPlace={selectedPlace}
-                onRegionChange={handleRegionChange}
-                onResetRegionRef={resetRegionRef}
+          <div className="p-3 border-b border-gray-100 shrink-0">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <input
+                type="text"
+                placeholder="식당 이름, 주소 검색"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-9 pr-8 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-blue-400 focus:bg-white transition-colors"
               />
+              {searchQuery && (
+                <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2">
+                  <X className="w-4 h-4 text-gray-400 hover:text-gray-600" />
+                </button>
+              )}
             </div>
-          </>
-        )}
-      </div>
+          </div>
+          <div className="flex-1 overflow-hidden">
+            <PlaceList
+              places={filteredPlaces}
+              totalCount={places.length}
+              onPlaceClick={handlePlaceClick}
+              selectedPlaceId={selectedPlace?.id ?? null}
+              selectedPlace={selectedPlace}
+              onRegionChange={handleRegionChange}
+              onResetRegionRef={resetRegionRef}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* ── 접힌 상태: 작은 플로팅 버튼 ── */}
+      {!sidebarOpen && (
+        <button
+          onClick={() => setSidebarOpen(true)}
+          className="hidden lg:flex lg:absolute lg:left-4 lg:top-4 lg:z-10 items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl shadow-lg transition-colors"
+          title="목록 열기"
+        >
+          <MapPin className="w-4 h-4" />
+          <span className="font-bold text-sm">맛집 목록</span>
+          <span className="text-blue-200 text-xs">({filteredPlaces.length}개)</span>
+          <ChevronDown className="w-4 h-4" />
+        </button>
+      )}
 
       {/* ── 지도 영역 ── */}
       <div className="flex-1 relative">
-        {/* 카테고리 칩 */}
+        {/* 카테고리 칩 — 사이드바 상태에 따라 시작점 조정 */}
         <div className={`absolute top-0 right-0 z-10 bg-white/95 backdrop-blur-sm border-b border-gray-200 transition-all duration-300 ${
           sidebarOpen ? 'left-0 lg:left-[416px]' : 'left-0'
         }`}>
