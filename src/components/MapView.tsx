@@ -68,6 +68,24 @@ export function MapView({
     kakaoMapRef.current.setLevel(centerOn.level);
   }, [centerOn]);
 
+
+  const getDistanceM = (lat1: number, lng1: number, lat2: number, lng2: number) => {
+    const R = 6371000;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLng = (lng2 - lng1) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) ** 2 +
+      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+      Math.sin(dLng / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  };
+
+  const findNearRegistered = (lat: number, lng: number, map: any): Place[] => {
+    const level = map.getLevel();
+    const radius = level <= 2 ? 30 : level <= 3 ? 60 : level <= 4 ? 120
+      : level <= 5 ? 250 : level <= 6 ? 500 : 800;
+    return places.filter((p) => getDistanceM(lat, lng, p.lat, p.lng) < radius);
+  };
+
   const searchKakao = (lat: number, lng: number) => {
     if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
     setSearching(true);
@@ -132,7 +150,7 @@ export function MapView({
     });
 
     window.kakao.maps.event.addListener(map, 'click', (mouseEvent: any) => {
-      // 마커 클릭에서 억제 플래그가 설정됐으면 → 이번 이벤트만 무시하고 플래그 해제
+      // 마커 클릭 억제 플래그 → 이번 이벤트 무시
       if (suppressMapClickRef.current) {
         suppressMapClickRef.current = false;
         return;
@@ -142,12 +160,22 @@ export function MapView({
       const lng = mouseEvent.latLng.getLng();
       if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
 
-      if (selectedPlaceRef.current) {
-        // 오버레이 열린 상태에서 빈 곳 클릭 → 오버레이만 닫기
+      const nearby = findNearRegistered(lat, lng, map);
+
+      if (nearby.length === 1) {
+        // 등록 가게 1개 → 바로 선택
+        setPopup(null); setSearching(false); setNearbyOpen(false);
+        onMarkerClick(nearby[0]);
+      } else if (nearby.length > 1) {
+        // 등록 가게 여러 개 → 선택 목록 표시
+        setNearbyList(nearby); setNearbyOpen(true);
+        setPopup(null); setSearching(false);
+      } else if (selectedPlaceRef.current) {
+        // 빈 곳 + 오버레이 열림 → 오버레이 닫기
         setPopup(null); setSearching(false); setNearbyOpen(false);
         onMarkerClick(null);
       } else {
-        // 오버레이 없는 상태 → 카카오 주변 검색
+        // 완전히 빈 곳 → 카카오 검색
         setNearbyOpen(false);
         searchKakao(lat, lng);
       }
