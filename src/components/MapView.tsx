@@ -38,14 +38,30 @@ export function MapView({ places, selectedPlace, selectedCategories, onMarkerCli
     return () => clearTimeout(timer);
   }, []);
 
-  // 카테고리 변경 시 마커 업데이트
+  // 카테고리 변경 시 클러스터러 재생성
   useEffect(() => {
-    if (!clustererRef.current || markersRef.current.length === 0) return;
-    clustererRef.current.clear();
+    if (!kakaoMapRef.current || markersRef.current.length === 0) return;
+
+    // 기존 클러스터러 완전히 제거
+    if (clustererRef.current) {
+      clustererRef.current.clear();
+      clustererRef.current = null;
+    }
+
+    // 필터링된 마커로 새 클러스터러 생성
     const filtered = markersRef.current
-      .filter(({ place }) => selectedCategories.length === 0 || selectedCategories.includes(place.category))
+      .filter(({ place }) =>
+        selectedCategories.length === 0 || selectedCategories.includes(place.category)
+      )
       .map(({ marker }) => marker);
-    clustererRef.current.addMarkers(filtered);
+
+    clustererRef.current = new (window.kakao.maps as any).MarkerClusterer({
+      map: kakaoMapRef.current,
+      markers: filtered,
+      gridSize: 60,
+      minLevel: 5,
+      disableClickZoom: false,
+    });
   }, [selectedCategories]);
 
   useEffect(() => {
