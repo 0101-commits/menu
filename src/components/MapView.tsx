@@ -20,8 +20,10 @@ export function MapView({ places, selectedPlace, onMarkerClick }: MapViewProps) 
   const kakaoMapRef = useRef<any>(null);
   const markersRef = useRef<any[]>([]);
   const overlayRef = useRef<any>(null);
-  
+  const currentLocationMarkerRef = useRef<any>(null);
+
   const [status, setStatus] = useState('로딩중');
+  const [locating, setLocating] = useState(false);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -33,61 +35,100 @@ export function MapView({ places, selectedPlace, onMarkerClick }: MapViewProps) 
         setStatus('에러');
       }
     }, 500);
-
     return () => clearTimeout(timer);
   }, []);
 
   const initializeMap = () => {
     if (!mapRef.current) return;
-    
     const centerLat = places.length > 0 ? places[0].lat : 37.394776;
     const centerLng = places.length > 0 ? places[0].lng : 127.11116;
-
     const map = new window.kakao.maps.Map(mapRef.current, {
       center: new window.kakao.maps.LatLng(centerLat, centerLng),
       level: 7,
     });
-
     kakaoMapRef.current = map;
     setStatus('완료');
     createMarkers(map);
   };
 
- const createMarkers = (map: any) => {
-  if ((window as any)._clusterer) {
-    (window as any)._clusterer.clear();
-  }
-  markersRef.current.forEach((marker) => marker.setMap(null));
-  markersRef.current = [];
+  const createMarkers = (map: any) => {
+    if ((window as any)._clusterer) {
+      (window as any)._clusterer.clear();
+    }
+    markersRef.current.forEach((marker) => marker.setMap(null));
+    markersRef.current = [];
 
-  const markers = places.map((place) => {
-    const position = new window.kakao.maps.LatLng(place.lat, place.lng);
-    const marker = new window.kakao.maps.Marker({ position });
-    window.kakao.maps.event.addListener(marker, 'click', () => {
-      onMarkerClick(place);
+    const markers = places.map((place) => {
+      const position = new window.kakao.maps.LatLng(place.lat, place.lng);
+      const marker = new window.kakao.maps.Marker({ position });
+      window.kakao.maps.event.addListener(marker, 'click', () => {
+        onMarkerClick(place);
+      });
+      return marker;
     });
-    return marker;
-  });
 
-  markersRef.current = markers;
+    markersRef.current = markers;
 
-  const clusterer = new (window.kakao.maps as any).MarkerClusterer({
-    map,
-    markers,
-    gridSize: 60,
-    minLevel: 5,
-    disableClickZoom: false,
-  });
+    const clusterer = new (window.kakao.maps as any).MarkerClusterer({
+      map,
+      markers,
+      gridSize: 60,
+      minLevel: 5,
+      disableClickZoom: false,
+    });
 
-  (window as any)._clusterer = clusterer;
-};
+    (window as any)._clusterer = clusterer;
+  };
+
+  // 현재 위치로 이동
+  const moveToCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      alert('이 브라우저는 위치 서비스를 지원하지 않습니다.');
+      return;
+    }
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        const position = new window.kakao.maps.LatLng(lat, lng);
+
+        // 기존 현재위치 마커 제거
+        if (currentLocationMarkerRef.current) {
+          currentLocationMarkerRef.current.setMap(null);
+        }
+
+        // 파란 원 모양 현재위치 마커
+        const markerImage = new window.kakao.maps.MarkerImage(
+          'https://t1.daumcdn.net/localimg/localimages/07/mapapidoc/markerStar.png',
+          new window.kakao.maps.Size(24, 35)
+        );
+
+        const marker = new window.kakao.maps.Marker({
+          position,
+          map: kakaoMapRef.current,
+          image: markerImage,
+          title: '현재 위치',
+        });
+
+        currentLocationMarkerRef.current = marker;
+        kakaoMapRef.current.setCenter(position);
+        kakaoMapRef.current.setLevel(4);
+        setLocating(false);
+      },
+      () => {
+        alert('위치를 가져올 수 없습니다. 브라우저 위치 권한을 허용해주세요.');
+        setLocating(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  };
 
   useEffect(() => {
     if (status !== '완료' || !kakaoMapRef.current || !selectedPlace) {
-       if (overlayRef.current) overlayRef.current.setMap(null);
-       return;
+      if (overlayRef.current) overlayRef.current.setMap(null);
+      return;
     }
-
     if (overlayRef.current) overlayRef.current.setMap(null);
 
     const position = new window.kakao.maps.LatLng(selectedPlace.lat, selectedPlace.lng);
@@ -111,13 +152,34 @@ export function MapView({ places, selectedPlace, onMarkerClick }: MapViewProps) 
 
     customOverlay.setMap(kakaoMapRef.current);
     overlayRef.current = customOverlay;
-
   }, [selectedPlace, status]);
 
   return (
     <div className="w-full h-full relative">
       <div ref={mapRef} className="w-full h-full" />
-      
+
+      {/* 현재 위치 버튼 */}
+      {status === '완료' && (
+        <button
+          onClick={moveToCurrentLocation}
+          disabled={locating}
+          className="absolute bottom-6 right-4 z-10 bg-white rounded-full shadow-lg p-3 hover:bg-gray-50 transition-colors border border-gray-200 disabled:opacity-50"
+          title="현재 위치로 이동"
+        >
+          {locating ? (
+            <svg className="w-5 h-5 text-blue-500 animate-spin" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+            </svg>
+          ) : (
+            <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" />
+            </svg>
+          )}
+        </button>
+      )}
+
       {status === '로딩중' && (
         <div className="absolute inset-0 flex items-center justify-center bg-gray-100 z-50">
           <div className="text-center">
