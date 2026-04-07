@@ -50,7 +50,7 @@ export function PlaceList({ places, onPlaceClick, selectedPlaceId }: PlaceListPr
             </div>
             <p className="text-sm text-gray-500 mb-4">{place.address}</p>
             <div className="flex gap-2">
-              
+              <a
                 href={place.naverUrl}
                 target="_blank"
                 rel="noopener noreferrer"
