@@ -2,20 +2,23 @@ import { Place } from '../data/places';
 
 async function openKakaoPlace(place: Place) {
   try {
-    const query = `${place.name} ${place.address}`;
     const res = await fetch(
-      `https://dapi.kakao.com/v2/local/search/keyword.json?query=${encodeURIComponent(query)}&x=${place.lng}&y=${place.lat}&radius=100`,
+      `https://dapi.kakao.com/v2/local/search/keyword.json?query=${encodeURIComponent(place.name)}&x=${place.lng}&y=${place.lat}&radius=300&size=1`,
       { headers: { Authorization: `KakaoAK ${import.meta.env.VITE_KAKAO_REST_API_KEY}` } }
     );
     const data = await res.json();
     if (data.documents?.length > 0) {
       window.open(`https://place.map.kakao.com/${data.documents[0].id}`, '_blank');
     } else {
-      window.open(`https://map.kakao.com/?q=${encodeURIComponent(query)}`, '_blank');
+      window.open(`https://map.kakao.com/?q=${encodeURIComponent(place.name)}`, '_blank');
     }
   } catch {
     window.open(`https://map.kakao.com/?q=${encodeURIComponent(place.name)}`, '_blank');
   }
+}
+
+function getGoogleUrl(place: Place) {
+  return `https://www.google.com/maps/search/${encodeURIComponent(place.name)}/@${place.lat},${place.lng},17z`;
 }
 
 interface PlaceInfoWindowProps {
@@ -43,28 +46,53 @@ export function PlaceInfoWindow({ place, onClose }: PlaceInfoWindowProps) {
         <p className="text-sm text-gray-600">{place.address}</p>
       </div>
       <div className="flex gap-2 pt-3 border-t border-gray-200">
+
+        {/* 네이버 */}
         <a
           href={place.naverUrl}
           target="_blank"
           rel="noopener noreferrer"
           title="네이버 지도로 보기"
-          className="flex items-center gap-1.5 bg-green-50 hover:bg-green-100 cursor-pointer transition-colors px-3 py-2 rounded-lg flex-1"
+          className="flex flex-col items-center gap-1 bg-green-50 hover:bg-green-100 transition-colors px-3 py-2 rounded-lg flex-1"
         >
           <div className="w-6 h-6 bg-green-500 rounded-full flex items-center justify-center">
-            <span className="text-white font-bold text-sm">N</span>
+            <span className="text-white font-bold text-xs">N</span>
           </div>
-          <span className="font-semibold text-gray-900">{place.naverScore}</span>
+          <span className="font-semibold text-gray-900 text-xs">
+            {place.naverScore ?? '-'}
+          </span>
         </a>
+
+        {/* 카카오 */}
         <button
           onClick={() => openKakaoPlace(place)}
           title="카카오맵으로 보기"
-          className="flex items-center gap-1.5 bg-yellow-50 hover:bg-yellow-100 cursor-pointer transition-colors px-3 py-2 rounded-lg flex-1"
+          className="flex flex-col items-center gap-1 bg-yellow-50 hover:bg-yellow-100 transition-colors px-3 py-2 rounded-lg flex-1"
         >
           <div className="w-6 h-6 bg-yellow-400 rounded-full flex items-center justify-center">
-            <span className="text-gray-900 font-bold text-sm">K</span>
+            <span className="text-gray-900 font-bold text-xs">K</span>
           </div>
-          <span className="font-semibold text-gray-900">카카오맵</span>
+          <span className="font-semibold text-gray-900 text-xs">
+            {place.kakaoScore ?? '-'}
+          </span>
         </button>
+
+        {/* 구글 */}
+        <a
+          href={getGoogleUrl(place)}
+          target="_blank"
+          rel="noopener noreferrer"
+          title="구글 지도로 보기"
+          className="flex flex-col items-center gap-1 bg-blue-50 hover:bg-blue-100 transition-colors px-3 py-2 rounded-lg flex-1"
+        >
+          <div className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center">
+            <span className="text-white font-bold text-xs">G</span>
+          </div>
+          <span className="font-semibold text-gray-900 text-xs">
+            {place.googleScore ?? '-'}
+          </span>
+        </a>
+
       </div>
     </div>
   );
