@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useRef } from 'react';
 import { MapView } from './components/MapView';
 import { PlaceList } from './components/PlaceList';
 import { places, Place } from './data/places';
@@ -11,6 +11,7 @@ export default function App() {
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [centerOn, setCenterOn] = useState<{ lat: number; lng: number; level: number } | null>(null);
   const [regionFilteredPlaces, setRegionFilteredPlaces] = useState<Place[] | null>(null);
+  const resetRegionRef = useRef<(() => void) | null>(null);
 
   const categories = useMemo(() => {
     return Array.from(new Set(places.map((p) => p.category))).sort();
@@ -22,7 +23,17 @@ export default function App() {
     );
   };
 
-  // 지역 필터 변경: 해당 지역 가게만 리스트에 표시 + 지도 이동
+  // 마커 클릭 시: 지역 필터 초기화 + 해당 가게 지도 표시
+  const handlePlaceClick = useCallback((place: Place | null) => {
+    setSelectedPlace(place);
+    if (place) {
+      // 지역 필터 해제 → 지도 범위 기준으로 복귀
+      setRegionFilteredPlaces(null);
+      // PlaceList 내부 지역 드롭다운도 초기화
+      resetRegionRef.current?.();
+    }
+  }, []);
+
   const handleRegionChange = useCallback((
     filtered: Place[],
     lat: number | null,
@@ -30,9 +41,9 @@ export default function App() {
   ) => {
     if (lat !== null && lng !== null) {
       setCenterOn({ lat, lng, level: 7 });
-      setRegionFilteredPlaces(filtered); // 해당 지역 가게만
+      setRegionFilteredPlaces(filtered);
     } else {
-      setRegionFilteredPlaces(null); // 초기화 시 지도 범위로 복귀
+      setRegionFilteredPlaces(null);
     }
   }, []);
 
@@ -40,7 +51,7 @@ export default function App() {
   const baseList = regionFilteredPlaces ?? visiblePlaces;
 
   const filteredPlaces = useMemo(() => {
-    return baseList.filter((p) => {
+    let list = baseList.filter((p) => {
       const matchCat = selectedCategories.length === 0 || selectedCategories.includes(p.category);
       const matchSearch =
         searchQuery.trim() === '' ||
@@ -48,7 +59,14 @@ export default function App() {
         p.address.toLowerCase().includes(searchQuery.toLowerCase());
       return matchCat && matchSearch;
     });
-  }, [baseList, selectedCategories, searchQuery]);
+
+    // 선택된 가게가 목록에 없으면 맨 위에 추가
+    if (selectedPlace && !list.find((p) => p.id === selectedPlace.id)) {
+      list = [selectedPlace, ...list];
+    }
+
+    return list;
+  }, [baseList, selectedCategories, searchQuery, selectedPlace]);
 
   return (
     <div className="h-screen w-screen overflow-hidden flex flex-col lg:flex-row">
@@ -80,16 +98,16 @@ export default function App() {
           <PlaceList
             places={filteredPlaces}
             totalCount={places.length}
-            onPlaceClick={setSelectedPlace}
+            onPlaceClick={handlePlaceClick}
             selectedPlaceId={selectedPlace?.id ?? null}
             onRegionChange={handleRegionChange}
+            onResetRegionRef={resetRegionRef}
           />
         </div>
       </div>
 
       {/* 지도 영역 */}
       <div className="flex-1 relative">
-        {/* 카테고리 칩 */}
         <div className="absolute top-0 left-0 right-0 z-10 bg-white/95 backdrop-blur-sm border-b border-gray-200 lg:left-[416px]">
           <div className="flex items-center gap-2 px-3 py-2 overflow-x-auto scrollbar-hide">
             <button
@@ -121,7 +139,7 @@ export default function App() {
         <MapView
           places={places}
           selectedPlace={selectedPlace}
-          onMarkerClick={setSelectedPlace}
+          onMarkerClick={handlePlaceClick}
           onBoundsChange={(vp) => { if (!regionFilteredPlaces) setVisiblePlaces(vp); }}
           centerOn={centerOn}
         />
