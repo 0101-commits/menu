@@ -43,7 +43,7 @@ export function PlaceInfoWindow({ place, onClose }: PlaceInfoWindowProps) {
         <p className="text-sm text-gray-600">{place.address}</p>
       </div>
       <div className="flex gap-2 pt-3 border-t border-gray-200">
-        
+        <a
           href={place.naverUrl}
           target="_blank"
           rel="noopener noreferrer"
