@@ -30,6 +30,8 @@ export function MapView({
   const clustererRef = useRef<any>(null);
   const searchTimerRef = useRef<any>(null);
   const selectedPlaceRef = useRef<Place | null>(null);
+  // 마커 클릭 시 지도 클릭 무시용 — 동기적으로 작동
+  const suppressMapClickRef = useRef(false);
 
   const [status, setStatus] = useState('로딩중');
   const [locating, setLocating] = useState(false);
@@ -38,10 +40,7 @@ export function MapView({
   const [nearbyList, setNearbyList] = useState<Place[]>([]);
   const [nearbyOpen, setNearbyOpen] = useState(false);
 
-  // selectedPlace를 ref에도 동기화 (클릭 핸들러에서 최신값 참조용)
-  useEffect(() => {
-    selectedPlaceRef.current = selectedPlace;
-  }, [selectedPlace]);
+  useEffect(() => { selectedPlaceRef.current = selectedPlace; }, [selectedPlace]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -69,23 +68,6 @@ export function MapView({
     kakaoMapRef.current.setCenter(new window.kakao.maps.LatLng(centerOn.lat, centerOn.lng));
     kakaoMapRef.current.setLevel(centerOn.level);
   }, [centerOn]);
-
-  const getDistanceM = (lat1: number, lng1: number, lat2: number, lng2: number) => {
-    const R = 6371000;
-    const dLat = (lat2 - lat1) * Math.PI / 180;
-    const dLng = (lng2 - lng1) * Math.PI / 180;
-    const a = Math.sin(dLat / 2) ** 2 +
-      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-      Math.sin(dLng / 2) ** 2;
-    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  };
-
-  const findNearRegistered = (lat: number, lng: number, map: any): Place[] => {
-    const level = map.getLevel();
-    const radius = level <= 2 ? 30 : level <= 3 ? 60 : level <= 4 ? 120
-      : level <= 5 ? 250 : level <= 6 ? 500 : 800;
-    return places.filter((p) => getDistanceM(lat, lng, p.lat, p.lng) < radius);
-  };
 
   const searchKakao = (lat: number, lng: number) => {
     if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
@@ -127,11 +109,20 @@ export function MapView({
     kakaoMapRef.current = map;
     setStatus('완료');
 
-    // ★ 마커에 클릭 핸들러 없음 — 지도 클릭 하나로만 처리
     const markerItems = places.map((place) => {
       const marker = new window.kakao.maps.Marker({
         position: new window.kakao.maps.LatLng(place.lat, place.lng)
       });
+
+      window.kakao.maps.event.addListener(marker, 'click', () => {
+        // ★ 마커 클릭: 지도 click 이벤트 억제 플래그 설정
+        suppressMapClickRef.current = true;
+        // 모든 팝업 닫기
+        if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+        setPopup(null); setSearching(false); setNearbyOpen(false);
+        onMarkerClick(place);
+      });
+
       return { marker, place };
     });
     markersRef.current = markerItems;
@@ -141,33 +132,23 @@ export function MapView({
       gridSize: 60, minLevel: 5, disableClickZoom: false,
     });
 
-    // ★ 지도 클릭 하나로 모든 케이스 처리
     window.kakao.maps.event.addListener(map, 'click', (mouseEvent: any) => {
+      // 마커 클릭에서 억제 플래그가 설정됐으면 → 이번 이벤트만 무시하고 플래그 해제
+      if (suppressMapClickRef.current) {
+        suppressMapClickRef.current = false;
+        return;
+      }
+
       const lat = mouseEvent.latLng.getLat();
       const lng = mouseEvent.latLng.getLng();
-
-      // 진행 중인 검색 취소
       if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
 
-      const nearby = findNearRegistered(lat, lng, map);
-
-      if (nearby.length === 1) {
-        // 등록 가게 1개 → 바로 선택
-        setPopup(null); setSearching(false); setNearbyOpen(false);
-        onMarkerClick(nearby[0]);
-
-      } else if (nearby.length > 1) {
-        // 등록 가게 여러 개 → 선택 목록
-        setNearbyList(nearby); setNearbyOpen(true);
-        setPopup(null); setSearching(false);
-
-      } else if (selectedPlaceRef.current) {
-        // 빈 곳 클릭 + 오버레이 열려있음 → 오버레이만 닫기, 검색 안 함
+      if (selectedPlaceRef.current) {
+        // 오버레이 열린 상태에서 빈 곳 클릭 → 오버레이만 닫기
         setPopup(null); setSearching(false); setNearbyOpen(false);
         onMarkerClick(null);
-
       } else {
-        // 완전히 빈 곳 → 카카오 검색
+        // 오버레이 없는 상태 → 카카오 주변 검색
         setNearbyOpen(false);
         searchKakao(lat, lng);
       }
@@ -208,7 +189,6 @@ export function MapView({
       return;
     }
     if (overlayRef.current) { overlayRef.current.setMap(null); overlayRef.current = null; }
-    // 카카오 팝업 모두 닫기
     setPopup(null); setSearching(false); setNearbyOpen(false);
     if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
 
