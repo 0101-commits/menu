@@ -46,53 +46,43 @@ export function PlaceInfoWindow({ place, onClose }: PlaceInfoWindowProps) {
         <p className="text-sm text-gray-600">{place.address}</p>
       </div>
       <div className="flex gap-2 pt-3 border-t border-gray-200">
-
         {/* 네이버 */}
         <a
           href={place.naverUrl}
           target="_blank"
           rel="noopener noreferrer"
           title="네이버 지도로 보기"
-          className="flex flex-col items-center gap-1 bg-green-50 hover:bg-green-100 transition-colors px-3 py-2 rounded-lg flex-1"
+          className="flex items-center justify-center gap-1.5 bg-green-50 hover:bg-green-100 transition-colors px-3 py-2 rounded-lg flex-1"
         >
           <div className="w-6 h-6 bg-green-500 rounded-full flex items-center justify-center">
-            <span className="text-white font-bold text-xs">N</span>
+            <span className="text-white font-bold text-sm">N</span>
           </div>
-          <span className="font-semibold text-gray-900 text-xs">
-            {place.naverScore ?? '-'}
-          </span>
+          <span className="text-sm font-semibold text-gray-700">네이버</span>
         </a>
-
         {/* 카카오 */}
         <button
           onClick={() => openKakaoPlace(place)}
           title="카카오맵으로 보기"
-          className="flex flex-col items-center gap-1 bg-yellow-50 hover:bg-yellow-100 transition-colors px-3 py-2 rounded-lg flex-1"
+          className="flex items-center justify-center gap-1.5 bg-yellow-50 hover:bg-yellow-100 transition-colors px-3 py-2 rounded-lg flex-1"
         >
           <div className="w-6 h-6 bg-yellow-400 rounded-full flex items-center justify-center">
-            <span className="text-gray-900 font-bold text-xs">K</span>
+            <span className="text-gray-900 font-bold text-sm">K</span>
           </div>
-          <span className="font-semibold text-gray-900 text-xs">
-            {place.kakaoScore ?? '-'}
-          </span>
+          <span className="text-sm font-semibold text-gray-700">카카오</span>
         </button>
-
         {/* 구글 */}
         <a
           href={getGoogleUrl(place)}
           target="_blank"
           rel="noopener noreferrer"
           title="구글 지도로 보기"
-          className="flex flex-col items-center gap-1 bg-blue-50 hover:bg-blue-100 transition-colors px-3 py-2 rounded-lg flex-1"
+          className="flex items-center justify-center gap-1.5 bg-blue-50 hover:bg-blue-100 transition-colors px-3 py-2 rounded-lg flex-1"
         >
           <div className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center">
-            <span className="text-white font-bold text-xs">G</span>
+            <span className="text-white font-bold text-sm">G</span>
           </div>
-          <span className="font-semibold text-gray-900 text-xs">
-            {place.googleScore ?? '-'}
-          </span>
+          <span className="text-sm font-semibold text-gray-700">구글</span>
         </a>
-
       </div>
     </div>
   );
