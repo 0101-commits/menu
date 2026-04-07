@@ -4,24 +4,22 @@ import { PlaceInfoWindow } from './PlaceInfoWindow';
 import { Place } from '../data/places';
 
 declare global {
-  interface Window {
-    kakao: any;
-  }
+  interface Window { kakao: any; }
 }
 
 interface MapViewProps {
   places: Place[];
   selectedPlace: Place | null;
   onMarkerClick: (place: Place) => void;
+  onBoundsChange?: (visiblePlaces: Place[]) => void;
 }
 
-export function MapView({ places, selectedPlace, onMarkerClick }: MapViewProps) {
+export function MapView({ places, selectedPlace, onMarkerClick, onBoundsChange }: MapViewProps) {
   const mapRef = useRef<HTMLDivElement>(null);
   const kakaoMapRef = useRef<any>(null);
   const markersRef = useRef<any[]>([]);
   const overlayRef = useRef<any>(null);
   const currentLocationMarkerRef = useRef<any>(null);
-
   const [status, setStatus] = useState('로딩중');
   const [locating, setLocating] = useState(false);
 
@@ -47,6 +45,23 @@ export function MapView({ places, selectedPlace, onMarkerClick }: MapViewProps) 
     kakaoMapRef.current = map;
     setStatus('완료');
     createMarkers(map);
+
+    // 지도 이동/줌 완료 시 리스트 업데이트
+    window.kakao.maps.event.addListener(map, 'idle', () => {
+      updateVisiblePlaces(map);
+    });
+
+    // 초기 로드 시도 반영
+    setTimeout(() => updateVisiblePlaces(map), 600);
+  };
+
+  const updateVisiblePlaces = (map: any) => {
+    if (!onBoundsChange) return;
+    const bounds = map.getBounds();
+    const visible = places.filter((p) =>
+      bounds.contain(new window.kakao.maps.LatLng(p.lat, p.lng))
+    );
+    onBoundsChange(visible);
   };
 
   const createMarkers = (map: any) => {
@@ -62,7 +77,6 @@ export function MapView({ places, selectedPlace, onMarkerClick }: MapViewProps) 
     });
 
     markersRef.current = markers;
-
     const clusterer = new (window.kakao.maps as any).MarkerClusterer({
       map, markers, gridSize: 60, minLevel: 5, disableClickZoom: false,
     });
@@ -70,27 +84,19 @@ export function MapView({ places, selectedPlace, onMarkerClick }: MapViewProps) 
   };
 
   const moveToCurrentLocation = () => {
-    if (!navigator.geolocation) {
-      alert('이 브라우저는 위치 서비스를 지원하지 않습니다.');
-      return;
-    }
+    if (!navigator.geolocation) { alert('위치 서비스를 지원하지 않습니다.'); return; }
     setLocating(true);
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         const position = new window.kakao.maps.LatLng(pos.coords.latitude, pos.coords.longitude);
         if (currentLocationMarkerRef.current) currentLocationMarkerRef.current.setMap(null);
-        const marker = new window.kakao.maps.Marker({
-          position, map: kakaoMapRef.current, title: '현재 위치',
-        });
+        const marker = new window.kakao.maps.Marker({ position, map: kakaoMapRef.current, title: '현재 위치' });
         currentLocationMarkerRef.current = marker;
         kakaoMapRef.current.setCenter(position);
         kakaoMapRef.current.setLevel(4);
         setLocating(false);
       },
-      () => {
-        alert('위치를 가져올 수 없습니다. 브라우저 위치 권한을 허용해주세요.');
-        setLocating(false);
-      },
+      () => { alert('위치 권한을 허용해주세요.'); setLocating(false); },
       { enableHighAccuracy: true, timeout: 10000 }
     );
   };
@@ -109,15 +115,10 @@ export function MapView({ places, selectedPlace, onMarkerClick }: MapViewProps) 
     const overlayContent = document.createElement('div');
     overlayContent.style.position = 'relative';
     overlayContent.style.bottom = '50px';
-
     const root = createRoot(overlayContent);
-    root.render(
-      <PlaceInfoWindow place={selectedPlace} onClose={() => onMarkerClick(null as any)} />
-    );
+    root.render(<PlaceInfoWindow place={selectedPlace} onClose={() => onMarkerClick(null as any)} />);
 
-    const customOverlay = new window.kakao.maps.CustomOverlay({
-      position, content: overlayContent, yAnchor: 1,
-    });
+    const customOverlay = new window.kakao.maps.CustomOverlay({ position, content: overlayContent, yAnchor: 1 });
     customOverlay.setMap(kakaoMapRef.current);
     overlayRef.current = customOverlay;
   }, [selectedPlace, status]);
@@ -126,7 +127,6 @@ export function MapView({ places, selectedPlace, onMarkerClick }: MapViewProps) 
     <div className="w-full h-full relative">
       <div ref={mapRef} className="w-full h-full" />
 
-      {/* 현재 위치 버튼 — 우측 하단 (Made with Bolt 위) */}
       {status === '완료' && (
         <button
           onClick={moveToCurrentLocation}
@@ -141,10 +141,8 @@ export function MapView({ places, selectedPlace, onMarkerClick }: MapViewProps) 
             </svg>
           ) : (
             <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
             </svg>
           )}
         </button>
@@ -158,15 +156,11 @@ export function MapView({ places, selectedPlace, onMarkerClick }: MapViewProps) 
           </div>
         </div>
       )}
-
       {status === '에러' && (
         <div className="absolute inset-0 flex items-center justify-center bg-gray-100 z-50">
           <div className="text-center text-red-600 p-6 bg-red-50 rounded-xl shadow-sm border border-red-200">
             <p className="font-bold text-xl mb-2">🚫 외부 스크립트 차단됨</p>
-            <p className="text-sm text-gray-700">
-              Bolt.new의 강력한 브라우저 보안 환경이 카카오맵을 차단했습니다.<br/>
-              이 코드는 정상이며, 외부 서버(Netlify 등)로 배포하면 정상 작동합니다.
-            </p>
+            <p className="text-sm text-gray-700">외부 서버(Netlify 등)로 배포하면 정상 작동합니다.</p>
           </div>
         </div>
       )}
