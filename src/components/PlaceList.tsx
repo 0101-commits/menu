@@ -6,6 +6,7 @@ interface PlaceListProps {
   totalCount: number;
   onPlaceClick: (place: Place) => void;
   selectedPlaceId: number | null;
+  onRegionChange: (filtered: Place[], lat: number | null, lng: number | null) => void;
 }
 
 async function openKakaoPlace(place: Place) {
@@ -34,24 +35,28 @@ function parseAddress(address: string) {
   return { large: parts[0] || '', medium: parts[1] || '', small: parts[2] || '' };
 }
 
-export function PlaceList({ places, totalCount, onPlaceClick, selectedPlaceId }: PlaceListProps) {
+// 전체 places import (지역 필터용)
+import { places as allPlaces } from '../data/places';
+
+export function PlaceList({ places, totalCount, onPlaceClick, selectedPlaceId, onRegionChange }: PlaceListProps) {
   const [selectedLarge, setSelectedLarge] = useState('');
   const [selectedMedium, setSelectedMedium] = useState('');
   const [selectedSmall, setSelectedSmall] = useState('');
 
+  // 전체 데이터 기준 지역 목록
   const largeList = useMemo(() => {
-    const s = new Set(places.map((p) => parseAddress(p.address).large).filter(Boolean));
+    const s = new Set(allPlaces.map((p) => parseAddress(p.address).large).filter(Boolean));
     return Array.from(s).sort();
-  }, [places]);
+  }, []);
 
   const mediumList = useMemo(() => {
-    const f = selectedLarge ? places.filter((p) => parseAddress(p.address).large === selectedLarge) : places;
+    const f = selectedLarge ? allPlaces.filter((p) => parseAddress(p.address).large === selectedLarge) : allPlaces;
     const s = new Set(f.map((p) => parseAddress(p.address).medium).filter(Boolean));
     return Array.from(s).sort();
-  }, [places, selectedLarge]);
+  }, [selectedLarge]);
 
   const smallList = useMemo(() => {
-    const f = places.filter((p) => {
+    const f = allPlaces.filter((p) => {
       const a = parseAddress(p.address);
       if (selectedLarge && a.large !== selectedLarge) return false;
       if (selectedMedium && a.medium !== selectedMedium) return false;
@@ -59,33 +64,72 @@ export function PlaceList({ places, totalCount, onPlaceClick, selectedPlaceId }:
     });
     const s = new Set(f.map((p) => parseAddress(p.address).small).filter(Boolean));
     return Array.from(s).sort();
-  }, [places, selectedLarge, selectedMedium]);
+  }, [selectedLarge, selectedMedium]);
 
-  const filtered = useMemo(() => {
-    return places.filter((p) => {
+  const handleLargeChange = (val: string) => {
+    setSelectedLarge(val);
+    setSelectedMedium('');
+    setSelectedSmall('');
+    if (!val) {
+      onRegionChange([], null, null);
+      return;
+    }
+    const filtered = allPlaces.filter((p) => parseAddress(p.address).large === val);
+    const avgLat = filtered.reduce((s, p) => s + p.lat, 0) / filtered.length;
+    const avgLng = filtered.reduce((s, p) => s + p.lng, 0) / filtered.length;
+    onRegionChange(filtered, avgLat, avgLng);
+  };
+
+  const handleMediumChange = (val: string) => {
+    setSelectedMedium(val);
+    setSelectedSmall('');
+    if (!val) {
+      handleLargeChange(selectedLarge);
+      return;
+    }
+    const filtered = allPlaces.filter((p) => {
       const a = parseAddress(p.address);
-      if (selectedLarge && a.large !== selectedLarge) return false;
-      if (selectedMedium && a.medium !== selectedMedium) return false;
-      if (selectedSmall && a.small !== selectedSmall) return false;
-      return true;
+      return a.large === selectedLarge && a.medium === val;
     });
-  }, [places, selectedLarge, selectedMedium, selectedSmall]);
+    const avgLat = filtered.reduce((s, p) => s + p.lat, 0) / filtered.length;
+    const avgLng = filtered.reduce((s, p) => s + p.lng, 0) / filtered.length;
+    onRegionChange(filtered, avgLat, avgLng);
+  };
+
+  const handleSmallChange = (val: string) => {
+    setSelectedSmall(val);
+    if (!val) {
+      handleMediumChange(selectedMedium);
+      return;
+    }
+    const filtered = allPlaces.filter((p) => {
+      const a = parseAddress(p.address);
+      return a.large === selectedLarge && a.medium === selectedMedium && a.small === val;
+    });
+    const avgLat = filtered.reduce((s, p) => s + p.lat, 0) / filtered.length;
+    const avgLng = filtered.reduce((s, p) => s + p.lng, 0) / filtered.length;
+    onRegionChange(filtered, avgLat, avgLng);
+  };
+
+  const resetRegion = () => {
+    setSelectedLarge('');
+    setSelectedMedium('');
+    setSelectedSmall('');
+    onRegionChange([], null, null);
+  };
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
 
-      {/* 카운트 + 지역 필터 */}
+      {/* 지역 필터 */}
       <div className="px-3 pt-2 pb-3 border-b border-gray-100 shrink-0">
         <div className="flex items-center justify-between mb-2">
           <p className="text-xs text-gray-500">
-            <span className="font-bold text-gray-800">{filtered.length}</span>개 표시
+            <span className="font-bold text-gray-800">{places.length}</span>개 표시
             <span className="text-gray-400"> / 총 {totalCount}개</span>
           </p>
           {(selectedLarge || selectedMedium || selectedSmall) && (
-            <button
-              onClick={() => { setSelectedLarge(''); setSelectedMedium(''); setSelectedSmall(''); }}
-              className="text-xs text-blue-500 hover:text-blue-700"
-            >
+            <button onClick={resetRegion} className="text-xs text-blue-500 hover:text-blue-700">
               지역 초기화
             </button>
           )}
@@ -93,7 +137,7 @@ export function PlaceList({ places, totalCount, onPlaceClick, selectedPlaceId }:
         <div className="flex gap-1.5">
           <select
             value={selectedLarge}
-            onChange={(e) => { setSelectedLarge(e.target.value); setSelectedMedium(''); setSelectedSmall(''); }}
+            onChange={(e) => handleLargeChange(e.target.value)}
             className="flex-1 text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-gray-700 focus:outline-none focus:border-blue-400"
           >
             <option value="">시/도</option>
@@ -101,7 +145,7 @@ export function PlaceList({ places, totalCount, onPlaceClick, selectedPlaceId }:
           </select>
           <select
             value={selectedMedium}
-            onChange={(e) => { setSelectedMedium(e.target.value); setSelectedSmall(''); }}
+            onChange={(e) => handleMediumChange(e.target.value)}
             disabled={!selectedLarge}
             className="flex-1 text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-gray-700 focus:outline-none focus:border-blue-400 disabled:opacity-40"
           >
@@ -110,7 +154,7 @@ export function PlaceList({ places, totalCount, onPlaceClick, selectedPlaceId }:
           </select>
           <select
             value={selectedSmall}
-            onChange={(e) => setSelectedSmall(e.target.value)}
+            onChange={(e) => handleSmallChange(e.target.value)}
             disabled={!selectedMedium}
             className="flex-1 text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-gray-700 focus:outline-none focus:border-blue-400 disabled:opacity-40"
           >
@@ -122,12 +166,12 @@ export function PlaceList({ places, totalCount, onPlaceClick, selectedPlaceId }:
 
       {/* 리스트 */}
       <div className="flex-1 overflow-y-auto p-3 space-y-3">
-        {filtered.length === 0 ? (
+        {places.length === 0 ? (
           <div className="flex items-center justify-center h-32 text-gray-400 text-sm">
             검색 결과가 없습니다
           </div>
         ) : (
-          filtered.map((place) => (
+          places.map((place) => (
             <div
               key={place.id}
               className={`p-4 rounded-xl border transition-all cursor-pointer ${
