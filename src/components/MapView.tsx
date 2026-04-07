@@ -10,22 +10,20 @@ declare global {
 interface MapViewProps {
   places: Place[];
   selectedPlace: Place | null;
+  selectedCategories: string[];
   onMarkerClick: (place: Place) => void;
   onBoundsChange?: (visiblePlaces: Place[]) => void;
   centerOn?: { lat: number; lng: number; level: number } | null;
 }
 
-interface KakaoPopup {
-  name: string;
-  address: string;
-  url: string;
-}
+interface KakaoPopup { name: string; address: string; url: string; }
 
-export function MapView({ places, selectedPlace, onMarkerClick, onBoundsChange, centerOn }: MapViewProps) {
+export function MapView({ places, selectedPlace, selectedCategories, onMarkerClick, onBoundsChange, centerOn }: MapViewProps) {
   const mapRef = useRef<HTMLDivElement>(null);
   const kakaoMapRef = useRef<any>(null);
-  const markersRef = useRef<any[]>([]);
+  const markersRef = useRef<{ marker: any; place: Place }[]>([]);
   const overlayRef = useRef<any>(null);
+  const clustererRef = useRef<any>(null);
   const [status, setStatus] = useState('로딩중');
   const [locating, setLocating] = useState(false);
   const [popup, setPopup] = useState<KakaoPopup | null>(null);
@@ -40,42 +38,41 @@ export function MapView({ places, selectedPlace, onMarkerClick, onBoundsChange, 
     return () => clearTimeout(timer);
   }, []);
 
+  // 카테고리 변경 시 마커 업데이트
+  useEffect(() => {
+    if (!clustererRef.current || markersRef.current.length === 0) return;
+    clustererRef.current.clear();
+    const filtered = markersRef.current
+      .filter(({ place }) => selectedCategories.length === 0 || selectedCategories.includes(place.category))
+      .map(({ marker }) => marker);
+    clustererRef.current.addMarkers(filtered);
+  }, [selectedCategories]);
+
   useEffect(() => {
     if (!centerOn || !kakaoMapRef.current) return;
     kakaoMapRef.current.setCenter(new window.kakao.maps.LatLng(centerOn.lat, centerOn.lng));
     kakaoMapRef.current.setLevel(centerOn.level);
   }, [centerOn]);
 
-  // 카카오맵 SDK Places 서비스로 주변 가게 검색 (CORS 없음)
   const searchNearbyPlace = (lat: number, lng: number) => {
     if (!window.kakao?.maps?.services) return;
     setSearching(true);
     setPopup(null);
-
     const ps = new window.kakao.maps.services.Places();
     const location = new window.kakao.maps.LatLng(lat, lng);
-
     let found = false;
-
     const handleResult = (results: any[], status: string) => {
       if (found) return;
       if (status === window.kakao.maps.services.Status.OK && results.length > 0) {
         found = true;
         const d = results[0];
-        setPopup({
-          name: d.place_name,
-          address: d.road_address_name || d.address_name,
-          url: `https://place.map.kakao.com/${d.id}`,
-        });
+        setPopup({ name: d.place_name, address: d.road_address_name || d.address_name, url: `https://place.map.kakao.com/${d.id}` });
         setSearching(false);
       }
     };
-
-    // 음식점 검색
     ps.categorySearch('FD6', (r: any[], s: string) => {
       handleResult(r, s);
       if (!found) {
-        // 음식점 없으면 카페 검색
         ps.categorySearch('CE7', (r2: any[], s2: string) => {
           handleResult(r2, s2);
           if (!found) setSearching(false);
@@ -94,34 +91,9 @@ export function MapView({ places, selectedPlace, onMarkerClick, onBoundsChange, 
     });
     kakaoMapRef.current = map;
     setStatus('완료');
-    createMarkers(map);
 
-    window.kakao.maps.event.addListener(map, 'click', (mouseEvent: any) => {
-      const lat = mouseEvent.latLng.getLat();
-      const lng = mouseEvent.latLng.getLng();
-      searchNearbyPlace(lat, lng);
-    });
-
-    window.kakao.maps.event.addListener(map, 'idle', () => {
-      if (!onBoundsChange) return;
-      const bounds = map.getBounds();
-      const visible = places.filter((p) => bounds.contain(new window.kakao.maps.LatLng(p.lat, p.lng)));
-      onBoundsChange(visible);
-    });
-
-    setTimeout(() => {
-      if (!onBoundsChange) return;
-      const bounds = map.getBounds();
-      const visible = places.filter((p) => bounds.contain(new window.kakao.maps.LatLng(p.lat, p.lng)));
-      onBoundsChange(visible);
-    }, 600);
-  };
-
-  const createMarkers = (map: any) => {
-    if ((window as any)._clusterer) (window as any)._clusterer.clear();
-    markersRef.current.forEach((m) => m.setMap(null));
-    markersRef.current = [];
-    const markers = places.map((place) => {
+    // 마커 생성
+    const markerItems = places.map((place) => {
       const position = new window.kakao.maps.LatLng(place.lat, place.lng);
       const marker = new window.kakao.maps.Marker({ position });
       window.kakao.maps.event.addListener(marker, 'click', () => {
@@ -129,13 +101,28 @@ export function MapView({ places, selectedPlace, onMarkerClick, onBoundsChange, 
         setPopup(null);
         setSearching(false);
       });
-      return marker;
+      return { marker, place };
     });
-    markersRef.current = markers;
+    markersRef.current = markerItems;
+
     const clusterer = new (window.kakao.maps as any).MarkerClusterer({
-      map, markers, gridSize: 60, minLevel: 5, disableClickZoom: false,
+      map, markers: markerItems.map((m) => m.marker), gridSize: 60, minLevel: 5, disableClickZoom: false,
     });
-    (window as any)._clusterer = clusterer;
+    clustererRef.current = clusterer;
+
+    window.kakao.maps.event.addListener(map, 'click', (mouseEvent: any) => {
+      searchNearbyPlace(mouseEvent.latLng.getLat(), mouseEvent.latLng.getLng());
+    });
+    window.kakao.maps.event.addListener(map, 'idle', () => {
+      if (!onBoundsChange) return;
+      const bounds = map.getBounds();
+      onBoundsChange(places.filter((p) => bounds.contain(new window.kakao.maps.LatLng(p.lat, p.lng))));
+    });
+    setTimeout(() => {
+      if (!onBoundsChange) return;
+      const bounds = map.getBounds();
+      onBoundsChange(places.filter((p) => bounds.contain(new window.kakao.maps.LatLng(p.lat, p.lng))));
+    }, 600);
   };
 
   const moveToCurrentLocation = () => {
@@ -160,8 +147,7 @@ export function MapView({ places, selectedPlace, onMarkerClick, onBoundsChange, 
       return;
     }
     if (overlayRef.current) overlayRef.current.setMap(null);
-    setPopup(null);
-    setSearching(false);
+    setPopup(null); setSearching(false);
     const position = new window.kakao.maps.LatLng(selectedPlace.lat, selectedPlace.lng);
     kakaoMapRef.current.setCenter(position);
     const overlayContent = document.createElement('div');
@@ -180,7 +166,6 @@ export function MapView({ places, selectedPlace, onMarkerClick, onBoundsChange, 
         <div ref={mapRef} className="w-full h-full" />
       </div>
 
-      {/* 지도 클릭 팝업 */}
       {(popup || searching) && (
         <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-20 bg-white rounded-xl shadow-xl border border-gray-200 p-4 min-w-[260px] max-w-[320px]">
           {searching ? (
@@ -192,22 +177,15 @@ export function MapView({ places, selectedPlace, onMarkerClick, onBoundsChange, 
             <>
               <div className="flex justify-between items-start mb-2">
                 <h3 className="font-bold text-gray-900 text-base leading-tight">{popup.name}</h3>
-                <button
-                  onClick={() => setPopup(null)}
-                  className="text-gray-400 hover:text-gray-600 ml-2 shrink-0 mt-0.5"
-                >
+                <button onClick={() => setPopup(null)} className="text-gray-400 hover:text-gray-600 ml-2 shrink-0">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                   </svg>
                 </button>
               </div>
               <p className="text-xs text-gray-500 mb-3">{popup.address}</p>
-              <a
-                href={popup.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center justify-center gap-2 bg-yellow-400 hover:bg-yellow-500 text-gray-900 font-semibold text-sm px-4 py-2.5 rounded-lg transition-colors w-full"
-              >
+              <a href={popup.url} target="_blank" rel="noopener noreferrer"
+                className="flex items-center justify-center gap-2 bg-yellow-400 hover:bg-yellow-500 text-gray-900 font-semibold text-sm px-4 py-2.5 rounded-lg transition-colors w-full">
                 <div className="w-5 h-5 bg-gray-900 rounded-full flex items-center justify-center shrink-0">
                   <span className="text-yellow-400 font-bold text-xs">K</span>
                 </div>
@@ -219,12 +197,9 @@ export function MapView({ places, selectedPlace, onMarkerClick, onBoundsChange, 
       )}
 
       {status === '완료' && (
-        <button
-          onClick={moveToCurrentLocation}
-          disabled={locating}
+        <button onClick={moveToCurrentLocation} disabled={locating}
           className="absolute bottom-16 right-4 z-10 bg-white rounded-full shadow-lg p-3 hover:bg-gray-50 transition-colors border border-gray-200 disabled:opacity-50"
-          title="현재 위치로 이동"
-        >
+          title="현재 위치로 이동">
           {locating ? (
             <svg className="w-5 h-5 text-blue-500 animate-spin" fill="none" viewBox="0 0 24 24">
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
