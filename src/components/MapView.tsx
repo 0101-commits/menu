@@ -15,33 +15,62 @@ interface MapViewProps {
   centerOn?: { lat: number; lng: number; level: number } | null;
 }
 
+interface KakaoPopup {
+  name: string;
+  address: string;
+  url: string;
+  lat: number;
+  lng: number;
+}
+
 export function MapView({ places, selectedPlace, onMarkerClick, onBoundsChange, centerOn }: MapViewProps) {
   const mapRef = useRef<HTMLDivElement>(null);
   const kakaoMapRef = useRef<any>(null);
   const markersRef = useRef<any[]>([]);
   const overlayRef = useRef<any>(null);
+  const mapClickOverlayRef = useRef<any>(null);
   const currentLocationMarkerRef = useRef<any>(null);
   const [status, setStatus] = useState('로딩중');
   const [locating, setLocating] = useState(false);
+  const [popup, setPopup] = useState<KakaoPopup | null>(null);
+  const [searching, setSearching] = useState(false);
 
   useEffect(() => {
     const timer = setTimeout(() => {
       if (window.kakao && window.kakao.maps) {
         window.kakao.maps.load(() => { initializeMap(); });
-      } else {
-        setStatus('에러');
-      }
+      } else { setStatus('에러'); }
     }, 500);
     return () => clearTimeout(timer);
   }, []);
 
-  // centerOn 변경 시 지도 이동
   useEffect(() => {
     if (!centerOn || !kakaoMapRef.current) return;
-    const position = new window.kakao.maps.LatLng(centerOn.lat, centerOn.lng);
-    kakaoMapRef.current.setCenter(position);
+    kakaoMapRef.current.setCenter(new window.kakao.maps.LatLng(centerOn.lat, centerOn.lng));
     kakaoMapRef.current.setLevel(centerOn.level);
   }, [centerOn]);
+
+  const searchNearbyPlace = async (lat: number, lng: number) => {
+    setSearching(true);
+    setPopup(null);
+    try {
+      const res = await fetch(
+        `https://dapi.kakao.com/v2/local/search/category.json?category_group_code=FD6,CE7&x=${lng}&y=${lat}&radius=50&size=1`,
+        { headers: { Authorization: `KakaoAK ${import.meta.env.VITE_KAKAO_REST_API_KEY}` } }
+      );
+      const data = await res.json();
+      if (data.documents?.length > 0) {
+        const d = data.documents[0];
+        setPopup({
+          name: d.place_name,
+          address: d.road_address_name || d.address_name,
+          url: `https://place.map.kakao.com/${d.id}`,
+          lat, lng,
+        });
+      }
+    } catch { /* silent */ }
+    setSearching(false);
+  };
 
   const initializeMap = () => {
     if (!mapRef.current) return;
@@ -55,21 +84,24 @@ export function MapView({ places, selectedPlace, onMarkerClick, onBoundsChange, 
     setStatus('완료');
     createMarkers(map);
 
+    // 지도 클릭 → 주변 가게 검색
+    window.kakao.maps.event.addListener(map, 'click', (mouseEvent: any) => {
+      const lat = mouseEvent.latLng.getLat();
+      const lng = mouseEvent.latLng.getLng();
+      searchNearbyPlace(lat, lng);
+    });
+
     window.kakao.maps.event.addListener(map, 'idle', () => {
       if (!onBoundsChange) return;
       const bounds = map.getBounds();
-      const visible = places.filter((p) =>
-        bounds.contain(new window.kakao.maps.LatLng(p.lat, p.lng))
-      );
+      const visible = places.filter((p) => bounds.contain(new window.kakao.maps.LatLng(p.lat, p.lng)));
       onBoundsChange(visible);
     });
 
     setTimeout(() => {
       if (!onBoundsChange) return;
       const bounds = map.getBounds();
-      const visible = places.filter((p) =>
-        bounds.contain(new window.kakao.maps.LatLng(p.lat, p.lng))
-      );
+      const visible = places.filter((p) => bounds.contain(new window.kakao.maps.LatLng(p.lat, p.lng)));
       onBoundsChange(visible);
     }, 600);
   };
@@ -81,7 +113,10 @@ export function MapView({ places, selectedPlace, onMarkerClick, onBoundsChange, 
     const markers = places.map((place) => {
       const position = new window.kakao.maps.LatLng(place.lat, place.lng);
       const marker = new window.kakao.maps.Marker({ position });
-      window.kakao.maps.event.addListener(marker, 'click', () => onMarkerClick(place));
+      window.kakao.maps.event.addListener(marker, 'click', () => {
+        onMarkerClick(place);
+        setPopup(null);
+      });
       return marker;
     });
     markersRef.current = markers;
@@ -98,8 +133,7 @@ export function MapView({ places, selectedPlace, onMarkerClick, onBoundsChange, 
       (pos) => {
         const position = new window.kakao.maps.LatLng(pos.coords.latitude, pos.coords.longitude);
         if (currentLocationMarkerRef.current) currentLocationMarkerRef.current.setMap(null);
-        const marker = new window.kakao.maps.Marker({ position, map: kakaoMapRef.current, title: '현재 위치' });
-        currentLocationMarkerRef.current = marker;
+        new window.kakao.maps.Marker({ position, map: kakaoMapRef.current, title: '현재 위치' });
         kakaoMapRef.current.setCenter(position);
         kakaoMapRef.current.setLevel(4);
         setLocating(false);
@@ -115,6 +149,7 @@ export function MapView({ places, selectedPlace, onMarkerClick, onBoundsChange, 
       return;
     }
     if (overlayRef.current) overlayRef.current.setMap(null);
+    setPopup(null);
     const position = new window.kakao.maps.LatLng(selectedPlace.lat, selectedPlace.lng);
     kakaoMapRef.current.setCenter(position);
     kakaoMapRef.current.setLevel(3);
@@ -122,7 +157,7 @@ export function MapView({ places, selectedPlace, onMarkerClick, onBoundsChange, 
     overlayContent.style.position = 'relative';
     overlayContent.style.bottom = '50px';
     const root = createRoot(overlayContent);
-    root.render(<PlaceInfoWindow place={selectedPlace} onClose={() => onMarkerClick(null as any)} />);
+    root.render(<PlaceInfoWindow place={selectedPlace} onClose={() => { onMarkerClick(null as any); }} />);
     const customOverlay = new window.kakao.maps.CustomOverlay({ position, content: overlayContent, yAnchor: 1 });
     customOverlay.setMap(kakaoMapRef.current);
     overlayRef.current = customOverlay;
@@ -130,11 +165,46 @@ export function MapView({ places, selectedPlace, onMarkerClick, onBoundsChange, 
 
   return (
     <div className="w-full h-full relative">
-      {/* 카테고리 칩 높이만큼 지도 상단 여백 */}
       <div className="absolute inset-0 top-10">
         <div ref={mapRef} className="w-full h-full" />
       </div>
 
+      {/* 지도 클릭 팝업 */}
+      {(popup || searching) && (
+        <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-20 bg-white rounded-xl shadow-xl border border-gray-200 p-4 min-w-[260px] max-w-[320px]">
+          {searching ? (
+            <div className="flex items-center gap-2 text-gray-500 text-sm">
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
+              주변 가게 검색 중...
+            </div>
+          ) : popup ? (
+            <>
+              <div className="flex justify-between items-start mb-2">
+                <h3 className="font-bold text-gray-900 text-base">{popup.name}</h3>
+                <button onClick={() => setPopup(null)} className="text-gray-400 hover:text-gray-600 ml-2 shrink-0">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              <p className="text-xs text-gray-500 mb-3">{popup.address}</p>
+              <a
+                href={popup.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-center gap-2 bg-yellow-400 hover:bg-yellow-500 text-gray-900 font-semibold text-sm px-4 py-2 rounded-lg transition-colors w-full"
+              >
+                <div className="w-5 h-5 bg-gray-900 rounded-full flex items-center justify-center">
+                  <span className="text-yellow-400 font-bold text-xs">K</span>
+                </div>
+                카카오맵에서 보기
+              </a>
+            </>
+          ) : null}
+        </div>
+      )}
+
+      {/* 현재 위치 버튼 */}
       {status === '완료' && (
         <button
           onClick={moveToCurrentLocation}
