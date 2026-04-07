@@ -1,5 +1,6 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Place } from '../data/places';
+import { places as allPlaces } from '../data/places';
 
 interface PlaceListProps {
   places: Place[];
@@ -7,6 +8,7 @@ interface PlaceListProps {
   onPlaceClick: (place: Place) => void;
   selectedPlaceId: number | null;
   onRegionChange: (filtered: Place[], lat: number | null, lng: number | null) => void;
+  onResetRegionRef: React.MutableRefObject<(() => void) | null>;
 }
 
 async function openKakaoPlace(place: Place) {
@@ -35,15 +37,20 @@ function parseAddress(address: string) {
   return { large: parts[0] || '', medium: parts[1] || '', small: parts[2] || '' };
 }
 
-// 전체 places import (지역 필터용)
-import { places as allPlaces } from '../data/places';
-
-export function PlaceList({ places, totalCount, onPlaceClick, selectedPlaceId, onRegionChange }: PlaceListProps) {
+export function PlaceList({ places, totalCount, onPlaceClick, selectedPlaceId, onRegionChange, onResetRegionRef }: PlaceListProps) {
   const [selectedLarge, setSelectedLarge] = useState('');
   const [selectedMedium, setSelectedMedium] = useState('');
   const [selectedSmall, setSelectedSmall] = useState('');
 
-  // 전체 데이터 기준 지역 목록
+  // 외부에서 지역 초기화 가능하도록 ref 등록
+  useEffect(() => {
+    onResetRegionRef.current = () => {
+      setSelectedLarge('');
+      setSelectedMedium('');
+      setSelectedSmall('');
+    };
+  }, [onResetRegionRef]);
+
   const largeList = useMemo(() => {
     const s = new Set(allPlaces.map((p) => parseAddress(p.address).large).filter(Boolean));
     return Array.from(s).sort();
@@ -67,13 +74,8 @@ export function PlaceList({ places, totalCount, onPlaceClick, selectedPlaceId, o
   }, [selectedLarge, selectedMedium]);
 
   const handleLargeChange = (val: string) => {
-    setSelectedLarge(val);
-    setSelectedMedium('');
-    setSelectedSmall('');
-    if (!val) {
-      onRegionChange([], null, null);
-      return;
-    }
+    setSelectedLarge(val); setSelectedMedium(''); setSelectedSmall('');
+    if (!val) { onRegionChange([], null, null); return; }
     const filtered = allPlaces.filter((p) => parseAddress(p.address).large === val);
     const avgLat = filtered.reduce((s, p) => s + p.lat, 0) / filtered.length;
     const avgLng = filtered.reduce((s, p) => s + p.lng, 0) / filtered.length;
@@ -81,12 +83,8 @@ export function PlaceList({ places, totalCount, onPlaceClick, selectedPlaceId, o
   };
 
   const handleMediumChange = (val: string) => {
-    setSelectedMedium(val);
-    setSelectedSmall('');
-    if (!val) {
-      handleLargeChange(selectedLarge);
-      return;
-    }
+    setSelectedMedium(val); setSelectedSmall('');
+    if (!val) { handleLargeChange(selectedLarge); return; }
     const filtered = allPlaces.filter((p) => {
       const a = parseAddress(p.address);
       return a.large === selectedLarge && a.medium === val;
@@ -98,10 +96,7 @@ export function PlaceList({ places, totalCount, onPlaceClick, selectedPlaceId, o
 
   const handleSmallChange = (val: string) => {
     setSelectedSmall(val);
-    if (!val) {
-      handleMediumChange(selectedMedium);
-      return;
-    }
+    if (!val) { handleMediumChange(selectedMedium); return; }
     const filtered = allPlaces.filter((p) => {
       const a = parseAddress(p.address);
       return a.large === selectedLarge && a.medium === selectedMedium && a.small === val;
@@ -112,16 +107,12 @@ export function PlaceList({ places, totalCount, onPlaceClick, selectedPlaceId, o
   };
 
   const resetRegion = () => {
-    setSelectedLarge('');
-    setSelectedMedium('');
-    setSelectedSmall('');
+    setSelectedLarge(''); setSelectedMedium(''); setSelectedSmall('');
     onRegionChange([], null, null);
   };
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
-
-      {/* 지역 필터 */}
       <div className="px-3 pt-2 pb-3 border-b border-gray-100 shrink-0">
         <div className="flex items-center justify-between mb-2">
           <p className="text-xs text-gray-500">
@@ -129,47 +120,33 @@ export function PlaceList({ places, totalCount, onPlaceClick, selectedPlaceId, o
             <span className="text-gray-400"> / 총 {totalCount}개</span>
           </p>
           {(selectedLarge || selectedMedium || selectedSmall) && (
-            <button onClick={resetRegion} className="text-xs text-blue-500 hover:text-blue-700">
-              지역 초기화
-            </button>
+            <button onClick={resetRegion} className="text-xs text-blue-500 hover:text-blue-700">지역 초기화</button>
           )}
         </div>
         <div className="flex gap-1.5">
-          <select
-            value={selectedLarge}
-            onChange={(e) => handleLargeChange(e.target.value)}
-            className="flex-1 text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-gray-700 focus:outline-none focus:border-blue-400"
-          >
+          <select value={selectedLarge} onChange={(e) => handleLargeChange(e.target.value)}
+            className="flex-1 text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-gray-700 focus:outline-none focus:border-blue-400">
             <option value="">시/도</option>
             {largeList.map((l) => <option key={l} value={l}>{l}</option>)}
           </select>
-          <select
-            value={selectedMedium}
-            onChange={(e) => handleMediumChange(e.target.value)}
+          <select value={selectedMedium} onChange={(e) => handleMediumChange(e.target.value)}
             disabled={!selectedLarge}
-            className="flex-1 text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-gray-700 focus:outline-none focus:border-blue-400 disabled:opacity-40"
-          >
+            className="flex-1 text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-gray-700 focus:outline-none focus:border-blue-400 disabled:opacity-40">
             <option value="">시/군/구</option>
             {mediumList.map((m) => <option key={m} value={m}>{m}</option>)}
           </select>
-          <select
-            value={selectedSmall}
-            onChange={(e) => handleSmallChange(e.target.value)}
+          <select value={selectedSmall} onChange={(e) => handleSmallChange(e.target.value)}
             disabled={!selectedMedium}
-            className="flex-1 text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-gray-700 focus:outline-none focus:border-blue-400 disabled:opacity-40"
-          >
+            className="flex-1 text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-gray-700 focus:outline-none focus:border-blue-400 disabled:opacity-40">
             <option value="">동/읍/면</option>
             {smallList.map((s) => <option key={s} value={s}>{s}</option>)}
           </select>
         </div>
       </div>
 
-      {/* 리스트 */}
       <div className="flex-1 overflow-y-auto p-3 space-y-3">
         {places.length === 0 ? (
-          <div className="flex items-center justify-center h-32 text-gray-400 text-sm">
-            검색 결과가 없습니다
-          </div>
+          <div className="flex items-center justify-center h-32 text-gray-400 text-sm">검색 결과가 없습니다</div>
         ) : (
           places.map((place) => (
             <div
@@ -183,40 +160,28 @@ export function PlaceList({ places, totalCount, onPlaceClick, selectedPlaceId, o
             >
               <div className="flex justify-between items-start mb-1.5">
                 <h3 className="font-bold text-gray-900 text-base">{place.name}</h3>
-                <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full font-medium shrink-0 ml-2">
-                  {place.category}
-                </span>
+                <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full font-medium shrink-0 ml-2">{place.category}</span>
               </div>
               <p className="text-xs text-gray-500 mb-3">{place.address}</p>
               <div className="flex gap-2">
-                <a
-                  href={place.naverUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                <a href={place.naverUrl} target="_blank" rel="noopener noreferrer"
                   onClick={(e) => e.stopPropagation()}
-                  className="flex items-center justify-center gap-1.5 bg-green-50 hover:bg-green-100 transition-colors px-3 py-2 rounded-lg flex-1"
-                >
+                  className="flex items-center justify-center gap-1.5 bg-green-50 hover:bg-green-100 transition-colors px-3 py-2 rounded-lg flex-1">
                   <div className="w-5 h-5 bg-green-500 rounded-full flex items-center justify-center">
                     <span className="text-white font-bold text-xs">N</span>
                   </div>
                   <span className="text-xs font-semibold text-gray-700">네이버</span>
                 </a>
-                <button
-                  onClick={(e) => { e.stopPropagation(); openKakaoPlace(place); }}
-                  className="flex items-center justify-center gap-1.5 bg-yellow-50 hover:bg-yellow-100 transition-colors px-3 py-2 rounded-lg flex-1"
-                >
+                <button onClick={(e) => { e.stopPropagation(); openKakaoPlace(place); }}
+                  className="flex items-center justify-center gap-1.5 bg-yellow-50 hover:bg-yellow-100 transition-colors px-3 py-2 rounded-lg flex-1">
                   <div className="w-5 h-5 bg-yellow-400 rounded-full flex items-center justify-center">
                     <span className="text-gray-900 font-bold text-xs">K</span>
                   </div>
                   <span className="text-xs font-semibold text-gray-700">카카오</span>
                 </button>
-                <a
-                  href={getGoogleUrl(place)}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                <a href={getGoogleUrl(place)} target="_blank" rel="noopener noreferrer"
                   onClick={(e) => e.stopPropagation()}
-                  className="flex items-center justify-center gap-1.5 bg-blue-50 hover:bg-blue-100 transition-colors px-3 py-2 rounded-lg flex-1"
-                >
+                  className="flex items-center justify-center gap-1.5 bg-blue-50 hover:bg-blue-100 transition-colors px-3 py-2 rounded-lg flex-1">
                   <div className="w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center">
                     <span className="text-white font-bold text-xs">G</span>
                   </div>
