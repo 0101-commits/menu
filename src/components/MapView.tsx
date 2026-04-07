@@ -28,9 +28,7 @@ export function MapView({ places, selectedPlace, onMarkerClick }: MapViewProps) 
   useEffect(() => {
     const timer = setTimeout(() => {
       if (window.kakao && window.kakao.maps) {
-        window.kakao.maps.load(() => {
-          initializeMap();
-        });
+        window.kakao.maps.load(() => { initializeMap(); });
       } else {
         setStatus('에러');
       }
@@ -52,35 +50,25 @@ export function MapView({ places, selectedPlace, onMarkerClick }: MapViewProps) 
   };
 
   const createMarkers = (map: any) => {
-    if ((window as any)._clusterer) {
-      (window as any)._clusterer.clear();
-    }
-    markersRef.current.forEach((marker) => marker.setMap(null));
+    if ((window as any)._clusterer) (window as any)._clusterer.clear();
+    markersRef.current.forEach((m) => m.setMap(null));
     markersRef.current = [];
 
     const markers = places.map((place) => {
       const position = new window.kakao.maps.LatLng(place.lat, place.lng);
       const marker = new window.kakao.maps.Marker({ position });
-      window.kakao.maps.event.addListener(marker, 'click', () => {
-        onMarkerClick(place);
-      });
+      window.kakao.maps.event.addListener(marker, 'click', () => onMarkerClick(place));
       return marker;
     });
 
     markersRef.current = markers;
 
     const clusterer = new (window.kakao.maps as any).MarkerClusterer({
-      map,
-      markers,
-      gridSize: 60,
-      minLevel: 5,
-      disableClickZoom: false,
+      map, markers, gridSize: 60, minLevel: 5, disableClickZoom: false,
     });
-
     (window as any)._clusterer = clusterer;
   };
 
-  // 현재 위치로 이동
   const moveToCurrentLocation = () => {
     if (!navigator.geolocation) {
       alert('이 브라우저는 위치 서비스를 지원하지 않습니다.');
@@ -89,28 +77,11 @@ export function MapView({ places, selectedPlace, onMarkerClick }: MapViewProps) 
     setLocating(true);
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        const lat = pos.coords.latitude;
-        const lng = pos.coords.longitude;
-        const position = new window.kakao.maps.LatLng(lat, lng);
-
-        // 기존 현재위치 마커 제거
-        if (currentLocationMarkerRef.current) {
-          currentLocationMarkerRef.current.setMap(null);
-        }
-
-        // 파란 원 모양 현재위치 마커
-        const markerImage = new window.kakao.maps.MarkerImage(
-          'https://t1.daumcdn.net/localimg/localimages/07/mapapidoc/markerStar.png',
-          new window.kakao.maps.Size(24, 35)
-        );
-
+        const position = new window.kakao.maps.LatLng(pos.coords.latitude, pos.coords.longitude);
+        if (currentLocationMarkerRef.current) currentLocationMarkerRef.current.setMap(null);
         const marker = new window.kakao.maps.Marker({
-          position,
-          map: kakaoMapRef.current,
-          image: markerImage,
-          title: '현재 위치',
+          position, map: kakaoMapRef.current, title: '현재 위치',
         });
-
         currentLocationMarkerRef.current = marker;
         kakaoMapRef.current.setCenter(position);
         kakaoMapRef.current.setLevel(4);
@@ -145,11 +116,8 @@ export function MapView({ places, selectedPlace, onMarkerClick }: MapViewProps) 
     );
 
     const customOverlay = new window.kakao.maps.CustomOverlay({
-      position,
-      content: overlayContent,
-      yAnchor: 1,
+      position, content: overlayContent, yAnchor: 1,
     });
-
     customOverlay.setMap(kakaoMapRef.current);
     overlayRef.current = customOverlay;
   }, [selectedPlace, status]);
@@ -158,12 +126,12 @@ export function MapView({ places, selectedPlace, onMarkerClick }: MapViewProps) 
     <div className="w-full h-full relative">
       <div ref={mapRef} className="w-full h-full" />
 
-      {/* 현재 위치 버튼 */}
+      {/* 현재 위치 버튼 — 우측 하단 (Made with Bolt 위) */}
       {status === '완료' && (
         <button
           onClick={moveToCurrentLocation}
           disabled={locating}
-          className="absolute bottom-6 right-4 z-10 bg-white rounded-full shadow-lg p-3 hover:bg-gray-50 transition-colors border border-gray-200 disabled:opacity-50"
+          className="absolute bottom-16 right-4 z-10 bg-white rounded-full shadow-lg p-3 hover:bg-gray-50 transition-colors border border-gray-200 disabled:opacity-50"
           title="현재 위치로 이동"
         >
           {locating ? (
@@ -174,7 +142,9 @@ export function MapView({ places, selectedPlace, onMarkerClick }: MapViewProps) 
           ) : (
             <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" />
+                d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
             </svg>
           )}
         </button>
