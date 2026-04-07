@@ -2,7 +2,15 @@ import { useState, useMemo, useCallback, useRef } from 'react';
 import { MapView } from './components/MapView';
 import { PlaceList } from './components/PlaceList';
 import { places, Place } from './data/places';
-import { MapPin, Search, X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { MapPin, Search, X, ChevronUp, ChevronDown } from 'lucide-react';
+
+function haversine(lat1: number, lng1: number, lat2: number, lng2: number) {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLng/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
 
 export default function App() {
   const [selectedPlace, setSelectedPlace] = useState<Place | null>(null);
@@ -14,30 +22,23 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const resetRegionRef = useRef<(() => void) | null>(null);
 
-  const categories = useMemo(() => {
-    return Array.from(new Set(places.map((p) => p.category))).sort();
-  }, []);
+  const categories = useMemo(() =>
+    Array.from(new Set(places.map((p) => p.category))).sort(), []);
 
-  const toggleCategory = (cat: string) => {
+  const toggleCategory = (cat: string) =>
     setSelectedCategories((prev) =>
-      prev.includes(cat) ? prev.filter((c) => c !== cat) : [...prev, cat]
-    );
-  };
+      prev.includes(cat) ? prev.filter((c) => c !== cat) : [...prev, cat]);
 
   const handlePlaceClick = useCallback((place: Place | null) => {
     setSelectedPlace(place);
     if (place) {
       setRegionFilteredPlaces(null);
       resetRegionRef.current?.();
-      setSidebarOpen(true); // 가게 클릭 시 사이드바 자동 열기
+      setSidebarOpen(true);
     }
   }, []);
 
-  const handleRegionChange = useCallback((
-    filtered: Place[],
-    lat: number | null,
-    lng: number | null
-  ) => {
+  const handleRegionChange = useCallback((filtered: Place[], lat: number | null, lng: number | null) => {
     if (lat !== null && lng !== null) {
       setCenterOn({ lat, lng, level: 7 });
       setRegionFilteredPlaces(filtered);
@@ -49,48 +50,59 @@ export default function App() {
   const baseList = regionFilteredPlaces ?? visiblePlaces;
 
   const filteredPlaces = useMemo(() => {
-    let list = baseList.filter((p) => {
+    // 가게 클릭 시 → 해당 가게 + 거리순 주변 가게
+    if (selectedPlace) {
+      const withDist = places
+        .map((p) => ({
+          ...p,
+          dist: haversine(selectedPlace.lat, selectedPlace.lng, p.lat, p.lng),
+        }))
+        .filter((p) => {
+          const matchCat = selectedCategories.length === 0 || selectedCategories.includes(p.category);
+          const matchSearch = searchQuery.trim() === '' ||
+            p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            p.address.toLowerCase().includes(searchQuery.toLowerCase());
+          return matchCat && matchSearch;
+        })
+        .sort((a, b) => a.dist - b.dist);
+
+      return withDist.map(({ dist: _dist, ...p }) => p as Place);
+    }
+
+    // 기본: 지역/지도 범위 필터
+    return baseList.filter((p) => {
       const matchCat = selectedCategories.length === 0 || selectedCategories.includes(p.category);
-      const matchSearch =
-        searchQuery.trim() === '' ||
+      const matchSearch = searchQuery.trim() === '' ||
         p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         p.address.toLowerCase().includes(searchQuery.toLowerCase());
       return matchCat && matchSearch;
     });
-    if (selectedPlace && !list.find((p) => p.id === selectedPlace.id)) {
-      list = [selectedPlace, ...list];
-    }
-    return list;
   }, [baseList, selectedCategories, searchQuery, selectedPlace]);
 
   return (
     <div className="h-screen w-screen overflow-hidden flex flex-col lg:flex-row">
 
-      {/* ── 사이드바 ── */}
-      <div
-        className={`lg:absolute lg:left-4 lg:top-4 lg:bottom-4 lg:z-10 lg:h-auto flex flex-col bg-white shadow-xl lg:rounded-xl overflow-hidden transition-all duration-300 ${
-          sidebarOpen ? 'lg:w-96 h-64' : 'lg:w-12 h-12 lg:h-auto'
-        } w-full`}
-      >
-        {sidebarOpen ? (
-          <>
-            {/* 헤더 */}
-            <div className="px-4 pt-3 pb-2 bg-blue-600 text-white shrink-0 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <MapPin className="w-4 h-4" />
-                <span className="font-bold text-sm">나만의 맛집 평점 지도</span>
-              </div>
-              {/* 접기 버튼 */}
-              <button
-                onClick={() => setSidebarOpen(false)}
-                className="p-1 rounded-lg hover:bg-blue-500 transition-colors"
-                title="사이드바 접기"
-              >
-                <ChevronLeft className="w-4 h-4" />
-              </button>
-            </div>
+      {/* ── 사이드바 (위로 접힘) ── */}
+      <div className={`lg:absolute lg:left-4 lg:top-4 lg:z-10 lg:w-96 w-full flex flex-col bg-white shadow-xl lg:rounded-xl overflow-hidden transition-all duration-300 ${
+        sidebarOpen ? 'lg:bottom-4 h-64 lg:h-auto' : 'h-12 lg:h-12'
+      }`}>
 
-            {/* 검색바 */}
+        {/* 헤더 (항상 표시) */}
+        <div
+          className="px-4 py-3 bg-blue-600 text-white shrink-0 flex items-center justify-between cursor-pointer select-none"
+          onClick={() => setSidebarOpen((o) => !o)}
+        >
+          <div className="flex items-center gap-2">
+            <MapPin className="w-4 h-4" />
+            <span className="font-bold text-sm">나만의 맛집 평점 지도</span>
+            <span className="text-blue-200 text-xs">({filteredPlaces.length}개)</span>
+          </div>
+          {sidebarOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+        </div>
+
+        {/* 내용 — 접히면 숨김 */}
+        {sidebarOpen && (
+          <>
             <div className="p-3 border-b border-gray-100 shrink-0">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -108,42 +120,27 @@ export default function App() {
                 )}
               </div>
             </div>
-
-            {/* 리스트 */}
             <div className="flex-1 overflow-hidden">
               <PlaceList
                 places={filteredPlaces}
                 totalCount={places.length}
                 onPlaceClick={handlePlaceClick}
                 selectedPlaceId={selectedPlace?.id ?? null}
+                selectedPlace={selectedPlace}
                 onRegionChange={handleRegionChange}
                 onResetRegionRef={resetRegionRef}
               />
             </div>
           </>
-        ) : (
-          /* 접힌 상태 — 펼치기 버튼만 표시 */
-          <button
-            onClick={() => setSidebarOpen(true)}
-            className="w-full h-full bg-blue-600 hover:bg-blue-700 text-white flex flex-col items-center justify-center gap-1 transition-colors lg:rounded-xl"
-            title="사이드바 열기"
-          >
-            <ChevronRight className="w-5 h-5" />
-            <span className="text-xs font-bold hidden lg:block" style={{ writingMode: 'vertical-rl' }}>
-              맛집 목록
-            </span>
-          </button>
         )}
       </div>
 
       {/* ── 지도 영역 ── */}
       <div className="flex-1 relative">
         {/* 카테고리 칩 */}
-        <div
-          className={`absolute top-0 right-0 z-10 bg-white/95 backdrop-blur-sm border-b border-gray-200 transition-all duration-300 ${
-            sidebarOpen ? 'left-0 lg:left-[416px]' : 'left-0 lg:left-16'
-          }`}
-        >
+        <div className={`absolute top-0 right-0 z-10 bg-white/95 backdrop-blur-sm border-b border-gray-200 transition-all duration-300 ${
+          sidebarOpen ? 'left-0 lg:left-[416px]' : 'left-0'
+        }`}>
           <div className="flex items-center gap-2 px-3 py-2 overflow-x-auto scrollbar-hide">
             <button
               onClick={() => setSelectedCategories([])}
@@ -174,6 +171,7 @@ export default function App() {
         <MapView
           places={places}
           selectedPlace={selectedPlace}
+          selectedCategories={selectedCategories}
           onMarkerClick={handlePlaceClick}
           onBoundsChange={(vp) => { if (!regionFilteredPlaces) setVisiblePlaces(vp); }}
           centerOn={centerOn}
