@@ -162,12 +162,8 @@ export function MapView({
 
       const nearby = findNearRegistered(lat, lng, map);
 
-      if (nearby.length === 1) {
-        // 등록 가게 1개 → 바로 선택
-        setPopup(null); setSearching(false); setNearbyOpen(false);
-        onMarkerClick(nearby[0]);
-      } else if (nearby.length > 1) {
-        // 등록 가게 여러 개 → 선택 목록 표시
+      if (nearby.length > 0) {
+        // 등록 가게 있으면 항상 목록 표시 (1개여도) → 유저가 직접 선택
         setNearbyList(nearby); setNearbyOpen(true);
         setPopup(null); setSearching(false);
       } else if (selectedPlaceRef.current) {
