@@ -3,6 +3,7 @@ import { Place } from '../data/places';
 
 interface PlaceListProps {
   places: Place[];
+  totalCount: number;
   onPlaceClick: (place: Place) => void;
   selectedPlaceId: number | null;
 }
@@ -30,147 +31,83 @@ function getGoogleUrl(place: Place) {
 
 function parseAddress(address: string) {
   const parts = address.trim().split(/\s+/);
-  return {
-    large: parts[0] || '',
-    medium: parts[1] || '',
-    small: parts[2] || '',
-  };
+  return { large: parts[0] || '', medium: parts[1] || '', small: parts[2] || '' };
 }
 
-export function PlaceList({ places, onPlaceClick, selectedPlaceId }: PlaceListProps) {
-  const [selectedCategory, setSelectedCategory] = useState<string>('전체');
-  const [selectedLarge, setSelectedLarge] = useState<string>('');
-  const [selectedMedium, setSelectedMedium] = useState<string>('');
-  const [selectedSmall, setSelectedSmall] = useState<string>('');
+export function PlaceList({ places, totalCount, onPlaceClick, selectedPlaceId }: PlaceListProps) {
+  const [selectedLarge, setSelectedLarge] = useState('');
+  const [selectedMedium, setSelectedMedium] = useState('');
+  const [selectedSmall, setSelectedSmall] = useState('');
 
-  // 카테고리 목록
-  const categories = useMemo(() => {
-    const cats = Array.from(new Set(places.map((p) => p.category))).sort();
-    return ['전체', ...cats];
-  }, [places]);
-
-  // 대분류 목록 (시/도)
   const largeList = useMemo(() => {
-    const set = new Set(places.map((p) => parseAddress(p.address).large).filter(Boolean));
-    return Array.from(set).sort();
+    const s = new Set(places.map((p) => parseAddress(p.address).large).filter(Boolean));
+    return Array.from(s).sort();
   }, [places]);
 
-  // 중분류 목록 (시/군/구) — 대분류 선택 시 필터
   const mediumList = useMemo(() => {
-    const filtered = selectedLarge
-      ? places.filter((p) => parseAddress(p.address).large === selectedLarge)
-      : places;
-    const set = new Set(filtered.map((p) => parseAddress(p.address).medium).filter(Boolean));
-    return Array.from(set).sort();
+    const f = selectedLarge ? places.filter((p) => parseAddress(p.address).large === selectedLarge) : places;
+    const s = new Set(f.map((p) => parseAddress(p.address).medium).filter(Boolean));
+    return Array.from(s).sort();
   }, [places, selectedLarge]);
 
-  // 소분류 목록 (구/동) — 중분류 선택 시 필터
   const smallList = useMemo(() => {
-    const filtered = places.filter((p) => {
-      const addr = parseAddress(p.address);
-      if (selectedLarge && addr.large !== selectedLarge) return false;
-      if (selectedMedium && addr.medium !== selectedMedium) return false;
+    const f = places.filter((p) => {
+      const a = parseAddress(p.address);
+      if (selectedLarge && a.large !== selectedLarge) return false;
+      if (selectedMedium && a.medium !== selectedMedium) return false;
       return true;
     });
-    const set = new Set(filtered.map((p) => parseAddress(p.address).small).filter(Boolean));
-    return Array.from(set).sort();
+    const s = new Set(f.map((p) => parseAddress(p.address).small).filter(Boolean));
+    return Array.from(s).sort();
   }, [places, selectedLarge, selectedMedium]);
 
-  // 최종 필터링
   const filtered = useMemo(() => {
     return places.filter((p) => {
-      const addr = parseAddress(p.address);
-      if (selectedCategory !== '전체' && p.category !== selectedCategory) return false;
-      if (selectedLarge && addr.large !== selectedLarge) return false;
-      if (selectedMedium && addr.medium !== selectedMedium) return false;
-      if (selectedSmall && addr.small !== selectedSmall) return false;
+      const a = parseAddress(p.address);
+      if (selectedLarge && a.large !== selectedLarge) return false;
+      if (selectedMedium && a.medium !== selectedMedium) return false;
+      if (selectedSmall && a.small !== selectedSmall) return false;
       return true;
     });
-  }, [places, selectedCategory, selectedLarge, selectedMedium, selectedSmall]);
-
-  const resetRegion = () => {
-    setSelectedLarge('');
-    setSelectedMedium('');
-    setSelectedSmall('');
-  };
+  }, [places, selectedLarge, selectedMedium, selectedSmall]);
 
   return (
-    <div className="h-full bg-white flex flex-col shadow-lg overflow-hidden lg:rounded-none">
-      {/* 헤더 */}
-      <div className="p-4 bg-blue-600 text-white shrink-0">
-        <h2 className="text-xl font-bold">맛집 리스트</h2>
-        <p className="text-blue-100 text-xs mt-0.5">
-          {filtered.length}개 표시 / 총 {places.length}개
-        </p>
-      </div>
+    <div className="h-full flex flex-col overflow-hidden">
 
-      {/* 카테고리 필터 */}
-      <div className="shrink-0 px-3 pt-3 pb-2 border-b border-gray-100">
-        <p className="text-xs font-semibold text-gray-500 mb-2">카테고리</p>
-        <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-hide">
-          {categories.map((cat) => (
-            <button
-              key={cat}
-              onClick={() => setSelectedCategory(cat)}
-              className={`shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-                selectedCategory === cat
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
-            >
-              {cat}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* 지역 필터 */}
-      <div className="shrink-0 px-3 pt-2 pb-3 border-b border-gray-100">
+      {/* 카운트 + 지역 필터 */}
+      <div className="px-3 pt-2 pb-3 border-b border-gray-100 shrink-0">
         <div className="flex items-center justify-between mb-2">
-          <p className="text-xs font-semibold text-gray-500">지역</p>
+          <p className="text-xs text-gray-500">
+            <span className="font-bold text-gray-800">{filtered.length}</span>개 표시
+            <span className="text-gray-400"> / 총 {totalCount}개</span>
+          </p>
           {(selectedLarge || selectedMedium || selectedSmall) && (
             <button
-              onClick={resetRegion}
+              onClick={() => { setSelectedLarge(''); setSelectedMedium(''); setSelectedSmall(''); }}
               className="text-xs text-blue-500 hover:text-blue-700"
             >
-              초기화
+              지역 초기화
             </button>
           )}
         </div>
-        <div className="flex gap-2">
-          {/* 대분류 */}
+        <div className="flex gap-1.5">
           <select
             value={selectedLarge}
-            onChange={(e) => {
-              setSelectedLarge(e.target.value);
-              setSelectedMedium('');
-              setSelectedSmall('');
-            }}
+            onChange={(e) => { setSelectedLarge(e.target.value); setSelectedMedium(''); setSelectedSmall(''); }}
             className="flex-1 text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-gray-700 focus:outline-none focus:border-blue-400"
           >
             <option value="">시/도</option>
-            {largeList.map((l) => (
-              <option key={l} value={l}>{l}</option>
-            ))}
+            {largeList.map((l) => <option key={l} value={l}>{l}</option>)}
           </select>
-
-          {/* 중분류 */}
           <select
             value={selectedMedium}
-            onChange={(e) => {
-              setSelectedMedium(e.target.value);
-              setSelectedSmall('');
-            }}
+            onChange={(e) => { setSelectedMedium(e.target.value); setSelectedSmall(''); }}
             disabled={!selectedLarge}
             className="flex-1 text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-gray-700 focus:outline-none focus:border-blue-400 disabled:opacity-40"
           >
             <option value="">시/군/구</option>
-            {mediumList.map((m) => (
-              <option key={m} value={m}>{m}</option>
-            ))}
+            {mediumList.map((m) => <option key={m} value={m}>{m}</option>)}
           </select>
-
-          {/* 소분류 */}
           <select
             value={selectedSmall}
             onChange={(e) => setSelectedSmall(e.target.value)}
@@ -178,9 +115,7 @@ export function PlaceList({ places, onPlaceClick, selectedPlaceId }: PlaceListPr
             className="flex-1 text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-gray-700 focus:outline-none focus:border-blue-400 disabled:opacity-40"
           >
             <option value="">동/읍/면</option>
-            {smallList.map((s) => (
-              <option key={s} value={s}>{s}</option>
-            ))}
+            {smallList.map((s) => <option key={s} value={s}>{s}</option>)}
           </select>
         </div>
       </div>
@@ -210,7 +145,6 @@ export function PlaceList({ places, onPlaceClick, selectedPlaceId }: PlaceListPr
               </div>
               <p className="text-xs text-gray-500 mb-3">{place.address}</p>
               <div className="flex gap-2">
-                {/* 네이버 */}
                 <a
                   href={place.naverUrl}
                   target="_blank"
@@ -223,7 +157,6 @@ export function PlaceList({ places, onPlaceClick, selectedPlaceId }: PlaceListPr
                   </div>
                   <span className="text-xs font-semibold text-gray-700">네이버</span>
                 </a>
-                {/* 카카오 */}
                 <button
                   onClick={(e) => { e.stopPropagation(); openKakaoPlace(place); }}
                   className="flex items-center justify-center gap-1.5 bg-yellow-50 hover:bg-yellow-100 transition-colors px-3 py-2 rounded-lg flex-1"
@@ -233,7 +166,6 @@ export function PlaceList({ places, onPlaceClick, selectedPlaceId }: PlaceListPr
                   </div>
                   <span className="text-xs font-semibold text-gray-700">카카오</span>
                 </button>
-                {/* 구글 */}
                 <a
                   href={getGoogleUrl(place)}
                   target="_blank"
