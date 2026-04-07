@@ -12,9 +12,10 @@ interface MapViewProps {
   selectedPlace: Place | null;
   onMarkerClick: (place: Place) => void;
   onBoundsChange?: (visiblePlaces: Place[]) => void;
+  centerOn?: { lat: number; lng: number; level: number } | null;
 }
 
-export function MapView({ places, selectedPlace, onMarkerClick, onBoundsChange }: MapViewProps) {
+export function MapView({ places, selectedPlace, onMarkerClick, onBoundsChange, centerOn }: MapViewProps) {
   const mapRef = useRef<HTMLDivElement>(null);
   const kakaoMapRef = useRef<any>(null);
   const markersRef = useRef<any[]>([]);
@@ -34,6 +35,14 @@ export function MapView({ places, selectedPlace, onMarkerClick, onBoundsChange }
     return () => clearTimeout(timer);
   }, []);
 
+  // centerOn 변경 시 지도 이동
+  useEffect(() => {
+    if (!centerOn || !kakaoMapRef.current) return;
+    const position = new window.kakao.maps.LatLng(centerOn.lat, centerOn.lng);
+    kakaoMapRef.current.setCenter(position);
+    kakaoMapRef.current.setLevel(centerOn.level);
+  }, [centerOn]);
+
   const initializeMap = () => {
     if (!mapRef.current) return;
     const centerLat = places.length > 0 ? places[0].lat : 37.394776;
@@ -46,36 +55,35 @@ export function MapView({ places, selectedPlace, onMarkerClick, onBoundsChange }
     setStatus('완료');
     createMarkers(map);
 
-    // 지도 이동/줌 완료 시 리스트 업데이트
     window.kakao.maps.event.addListener(map, 'idle', () => {
-      updateVisiblePlaces(map);
+      if (!onBoundsChange) return;
+      const bounds = map.getBounds();
+      const visible = places.filter((p) =>
+        bounds.contain(new window.kakao.maps.LatLng(p.lat, p.lng))
+      );
+      onBoundsChange(visible);
     });
 
-    // 초기 로드 시도 반영
-    setTimeout(() => updateVisiblePlaces(map), 600);
-  };
-
-  const updateVisiblePlaces = (map: any) => {
-    if (!onBoundsChange) return;
-    const bounds = map.getBounds();
-    const visible = places.filter((p) =>
-      bounds.contain(new window.kakao.maps.LatLng(p.lat, p.lng))
-    );
-    onBoundsChange(visible);
+    setTimeout(() => {
+      if (!onBoundsChange) return;
+      const bounds = map.getBounds();
+      const visible = places.filter((p) =>
+        bounds.contain(new window.kakao.maps.LatLng(p.lat, p.lng))
+      );
+      onBoundsChange(visible);
+    }, 600);
   };
 
   const createMarkers = (map: any) => {
     if ((window as any)._clusterer) (window as any)._clusterer.clear();
     markersRef.current.forEach((m) => m.setMap(null));
     markersRef.current = [];
-
     const markers = places.map((place) => {
       const position = new window.kakao.maps.LatLng(place.lat, place.lng);
       const marker = new window.kakao.maps.Marker({ position });
       window.kakao.maps.event.addListener(marker, 'click', () => onMarkerClick(place));
       return marker;
     });
-
     markersRef.current = markers;
     const clusterer = new (window.kakao.maps as any).MarkerClusterer({
       map, markers, gridSize: 60, minLevel: 5, disableClickZoom: false,
@@ -107,17 +115,14 @@ export function MapView({ places, selectedPlace, onMarkerClick, onBoundsChange }
       return;
     }
     if (overlayRef.current) overlayRef.current.setMap(null);
-
     const position = new window.kakao.maps.LatLng(selectedPlace.lat, selectedPlace.lng);
     kakaoMapRef.current.setCenter(position);
     kakaoMapRef.current.setLevel(3);
-
     const overlayContent = document.createElement('div');
     overlayContent.style.position = 'relative';
     overlayContent.style.bottom = '50px';
     const root = createRoot(overlayContent);
     root.render(<PlaceInfoWindow place={selectedPlace} onClose={() => onMarkerClick(null as any)} />);
-
     const customOverlay = new window.kakao.maps.CustomOverlay({ position, content: overlayContent, yAnchor: 1 });
     customOverlay.setMap(kakaoMapRef.current);
     overlayRef.current = customOverlay;
@@ -125,7 +130,10 @@ export function MapView({ places, selectedPlace, onMarkerClick, onBoundsChange }
 
   return (
     <div className="w-full h-full relative">
-      <div ref={mapRef} className="w-full h-full" />
+      {/* 카테고리 칩 높이만큼 지도 상단 여백 */}
+      <div className="absolute inset-0 top-10">
+        <div ref={mapRef} className="w-full h-full" />
+      </div>
 
       {status === '완료' && (
         <button
@@ -160,7 +168,7 @@ export function MapView({ places, selectedPlace, onMarkerClick, onBoundsChange }
         <div className="absolute inset-0 flex items-center justify-center bg-gray-100 z-50">
           <div className="text-center text-red-600 p-6 bg-red-50 rounded-xl shadow-sm border border-red-200">
             <p className="font-bold text-xl mb-2">🚫 외부 스크립트 차단됨</p>
-            <p className="text-sm text-gray-700">외부 서버(Netlify 등)로 배포하면 정상 작동합니다.</p>
+            <p className="text-sm text-gray-700">외부 서버로 배포하면 정상 작동합니다.</p>
           </div>
         </div>
       )}
