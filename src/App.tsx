@@ -68,7 +68,9 @@ export default function App() {
   const [searchNotice, setSearchNotice] = useState<string | null>(null);
 
   // ---------- 지도 ----------
-  const [visiblePlaces, setVisiblePlaces] = useState<Place[]>([]);
+  // null = 지도가 아직 범위를 알려주지 않았다(로딩 중이거나 실패). 빈 배열과 구분해야 한다 —
+  // 빈 배열로 두면 지도가 안 뜬 동안 목록이 0곳이 되어 앱 전체가 죽은 것처럼 보인다.
+  const [visiblePlaces, setVisiblePlaces] = useState<Place[] | null>(null);
   const [mapCenter, setMapCenter] = useState<{ lat: number; lng: number } | null>(null);
   const [focus, setFocus] = useState<MapFocus | null>(null);
   const [selectedPlace, setSelectedPlace] = useState<Place | null>(null);
@@ -160,25 +162,12 @@ export default function App() {
     const text = parsed.text.trim();
     if (!text) { setNear(null); setTextFilter(''); setRegion(EMPTY_REGION); return; }
 
-    // 1) 우리 데이터의 동·시군구 이름이면 행정구역으로 거른다.
-    //    "성수동" 을 반경으로 풀면 경계 밖 가게를 놓친다. 구역은 구역으로 자르는 게 정확하다.
-    const dongHit = places.find((p) => p.dong === text);
-    if (dongHit) {
-      setNear(null);
-      setTextFilter('');
-      setRegion({ sido: dongHit.sido, sigungu: dongHit.sigungu, dong: dongHit.dong });
-      return;
-    }
-    const guHit = places.find((p) => p.sigungu === text || p.sigungu.endsWith(` ${text}`));
-    if (guHit) {
-      setNear(null);
-      setTextFilter('');
-      setRegion({ sido: guHit.sido, sigungu: guHit.sigungu, dong: '' });
-      return;
-    }
-
-    // 2) 가게 이름이 맞으면 가게 검색. 단 "강남역" 처럼 지명꼴이면 지명이 먼저다 —
-    //    "…강남역점" 같은 가게가 있다고 해서 역을 못 찾으면 안 된다.
+    // 가게 이름이 맞으면 가게 검색이다. 단 "강남역" 처럼 지명꼴이면 지명이 먼저다 —
+    // "…강남역점" 같은 가게가 있다고 해서 역을 못 찾으면 안 된다.
+    //
+    // 동 이름("성수동")은 따로 다루지 않는다. 법정동은 "성수동1가"·"성수동2가" 라
+    // 정확히 일치하는 일이 드물고, 검색 인덱스가 dong 을 이미 포함하므로
+    // 평범한 텍스트 검색이 접두 일치로 둘 다 잡는다.
     const looksLikePlace = /(역|공원|대학교|터미널|공항|시장|광장|타워|스퀘어)$/.test(text);
     if (!looksLikePlace && places.some((p) => p.name.includes(text))) {
       setNear(null);
@@ -257,7 +246,7 @@ export default function App() {
     let list: Place[];
     if (near) {
       list = places.filter((p) => distanceM(near.lat, near.lng, p.lat, p.lng) <= radius);
-    } else if (scope === 'all') {
+    } else if (scope === 'all' || !visiblePlaces) {
       list = places;
     } else {
       list = visiblePlaces;
@@ -300,7 +289,7 @@ export default function App() {
   // 지도 범위 밖에 있는 결과 수. "지도 범위" 를 켠 채로 검색하면 화면 밖 가게가 빠지는데,
   // 그걸 말해 주지 않으면 "없는 가게" 로 오해한다.
   const outsideCount = useMemo(() => {
-    if (near || scope === 'all' || !textFilter.trim()) return 0;
+    if (near || scope === 'all' || !visiblePlaces || !textFilter.trim()) return 0;
     let all = places;
     if (region.sido) all = all.filter((p) => p.sido === region.sido);
     if (region.sigungu) all = all.filter((p) => p.sigungu === region.sigungu);
@@ -309,7 +298,7 @@ export default function App() {
     const allowed = new Set(all.map((p) => p.placeId));
     const hits = searchPlaces(index, textFilter).filter((p) => allowed.has(p.placeId));
     return Math.max(0, hits.length - filtered.length);
-  }, [near, scope, textFilter, places, region, categories, index, filtered.length]);
+  }, [near, scope, textFilter, places, region, categories, index, filtered.length, visiblePlaces]);
 
   // 검색어가 있으면 정렬이 이미 관련도 순이다. 거리순을 강제하지 않는다.
   const canSortDistance = Boolean(origin);
