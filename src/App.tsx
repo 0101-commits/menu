@@ -34,6 +34,7 @@ function readColorScheme(): ColorScheme {
 }
 
 const DEFAULT_MEANS: SourceMeans = { naver: 4.3, kakao: 3.9, google: 4.2 };
+const EMPTY_REGION = { sido: '', sigungu: '', dong: '' };
 
 interface Near {
   label: string;
@@ -157,10 +158,29 @@ export default function App() {
     setSearchNotice(null);
 
     const text = parsed.text.trim();
-    if (!text) { setNear(null); setTextFilter(''); return; }
+    if (!text) { setNear(null); setTextFilter(''); setRegion(EMPTY_REGION); return; }
 
-    // 저장한 가게 중에 이름이 맞는 게 있으면 그건 가게 검색이다. 중심을 옮기지 않는다.
-    if (places.some((p) => p.name.includes(text))) {
+    // 1) 우리 데이터의 동·시군구 이름이면 행정구역으로 거른다.
+    //    "성수동" 을 반경으로 풀면 경계 밖 가게를 놓친다. 구역은 구역으로 자르는 게 정확하다.
+    const dongHit = places.find((p) => p.dong === text);
+    if (dongHit) {
+      setNear(null);
+      setTextFilter('');
+      setRegion({ sido: dongHit.sido, sigungu: dongHit.sigungu, dong: dongHit.dong });
+      return;
+    }
+    const guHit = places.find((p) => p.sigungu === text || p.sigungu.endsWith(` ${text}`));
+    if (guHit) {
+      setNear(null);
+      setTextFilter('');
+      setRegion({ sido: guHit.sido, sigungu: guHit.sigungu, dong: '' });
+      return;
+    }
+
+    // 2) 가게 이름이 맞으면 가게 검색. 단 "강남역" 처럼 지명꼴이면 지명이 먼저다 —
+    //    "…강남역점" 같은 가게가 있다고 해서 역을 못 찾으면 안 된다.
+    const looksLikePlace = /(역|공원|대학교|터미널|공항|시장|광장|타워|스퀘어)$/.test(text);
+    if (!looksLikePlace && places.some((p) => p.name.includes(text))) {
       setNear(null);
       setTextFilter(text);
       return;
@@ -173,6 +193,7 @@ export default function App() {
         // 지명으로 해석했으면 그 말은 "어디" 를 뜻한다. 목록까지 그 글자로 거르면 0 건이 된다.
         setNear({ label: text, lat: hits[0].lat, lng: hits[0].lng });
         setTextFilter('');
+        setRegion(EMPTY_REGION);
       } else {
         setNear(null);
         setTextFilter(text);
@@ -236,7 +257,7 @@ export default function App() {
     let list: Place[];
     if (near) {
       list = places.filter((p) => distanceM(near.lat, near.lng, p.lat, p.lng) <= radius);
-    } else if (scope === 'all' || textFilter.trim()) {
+    } else if (scope === 'all') {
       list = places;
     } else {
       list = visiblePlaces;
@@ -275,6 +296,20 @@ export default function App() {
     }
     return sorted;
   }, [places, visiblePlaces, near, radius, scope, region, categories, textFilter, index, openOnly, minScore, ratings, means, sort, origin, unvisitedOnly, visitedIds]);
+
+  // 지도 범위 밖에 있는 결과 수. "지도 범위" 를 켠 채로 검색하면 화면 밖 가게가 빠지는데,
+  // 그걸 말해 주지 않으면 "없는 가게" 로 오해한다.
+  const outsideCount = useMemo(() => {
+    if (near || scope === 'all' || !textFilter.trim()) return 0;
+    let all = places;
+    if (region.sido) all = all.filter((p) => p.sido === region.sido);
+    if (region.sigungu) all = all.filter((p) => p.sigungu === region.sigungu);
+    if (region.dong) all = all.filter((p) => p.dong === region.dong);
+    if (categories.length) all = all.filter((p) => categories.includes(p.category));
+    const allowed = new Set(all.map((p) => p.placeId));
+    const hits = searchPlaces(index, textFilter).filter((p) => allowed.has(p.placeId));
+    return Math.max(0, hits.length - filtered.length);
+  }, [near, scope, textFilter, places, region, categories, index, filtered.length]);
 
   // 검색어가 있으면 정렬이 이미 관련도 순이다. 거리순을 강제하지 않는다.
   const canSortDistance = Boolean(origin);
@@ -480,6 +515,19 @@ export default function App() {
             {searchNotice && (
               <p className="shrink-0 m-0 px-3 py-2 text-xs text-[var(--matpin-closing)] bg-surface-fill border-b border-line-subtle">
                 {searchNotice}
+              </p>
+            )}
+
+            {outsideCount > 0 && (
+              <p className="shrink-0 m-0 px-3 py-2 text-xs text-fg-muted bg-surface-fill border-b border-line-subtle flex items-center justify-between gap-2">
+                <span>지도 밖에 {outsideCount.toLocaleString()}곳 더 있습니다</span>
+                <button
+                  type="button"
+                  onClick={() => setScope('all')}
+                  className="shrink-0 font-semibold text-primary-fg hover:underline min-h-9 px-1 rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                >
+                  전체에서 보기
+                </button>
               </p>
             )}
 

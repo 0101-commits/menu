@@ -8,7 +8,7 @@ import { Search, X, SlidersHorizontal, Sparkles } from 'lucide-react';
 import { TextField, SegmentedControl } from '@seed-design/react';
 import type { SortKey } from '../lib/url-state';
 
-export const RADII = [300, 500, 1000, 2000];
+const RADII = [300, 500, 1000, 2000];
 
 interface Props {
   query: string;
