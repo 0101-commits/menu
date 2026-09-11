@@ -23,9 +23,12 @@ npm run typecheck
 npm run build
 ```
 
-카카오 지도 SDK 는 **콘솔에 등록한 도메인에서만** 타일과 장소 검색이 동작한다.
-`localhost` 를 등록하지 않으면 지도가 안 뜨고 "강남역" 지오코딩이 조용히 실패한다.
-등록 방법은 [`docs/keys.html`](docs/keys.html).
+카카오 지도 SDK 는 **콘솔에 등록한 "도메인:포트" 에서만** 내려온다. 그 밖에서는 401
+(`domain mismatched`) 이 오고 지도도 장소 검색도 안 된다. 그래서 dev 포트를 5173 으로
+고정했다 — 포트가 밀려나면 조용히 깨지는 대신 시작에서 실패한다.
+
+실측(2026-09-11): `http://localhost:5173` 등록됨 · **`https://0101-commits.github.io` 미등록**.
+배포 전에 등록해야 한다. 방법은 [`docs/keys.html`](docs/keys.html).
 
 ## 데이터
 

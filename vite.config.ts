@@ -45,6 +45,13 @@ export default defineConfig({
       },
     }),
   ],
+  server: {
+    // 포트를 고정한다. 카카오 SDK 는 콘솔에 등록한 "도메인:포트" 에서만 내려오므로
+    // 5173 이 막혔다고 조용히 5174 로 밀려나면 지도와 장소 검색이 그냥 안 된다.
+    // 차라리 시작에서 실패하는 편이 낫다.
+    port: 5173,
+    strictPort: true,
+  },
   optimizeDeps: {
     exclude: ['lucide-react'],
   },
