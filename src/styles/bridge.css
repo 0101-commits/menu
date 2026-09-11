@@ -93,6 +93,18 @@
   --matpin-brand-naver: #03c75a;
   --matpin-brand-kakao: #fee500;
   --matpin-brand-google: #4285f4;
+
+  /* 영업 상태. 브랜드색이 아니라 의미색이라 따로 둔다.
+   * 핀 레드와 섞이면 "선택됨" 과 "곧 마감" 이 같은 신호로 읽힌다. */
+  --matpin-open: #1f7a4d;
+  --matpin-closing: #9a6700;
+}
+
+/* 다크에서는 같은 의미색을 밝은 쪽으로 옮긴다. 어두운 표면 위에서 대비가 안 나온다. */
+:root[data-seed][data-seed-color-mode="system"][data-seed-user-color-scheme="dark"],
+:root[data-seed][data-seed-color-mode="dark-only"] {
+  --matpin-open: #5fcf8f;
+  --matpin-closing: #f2c14e;
 }
 
 /* 지도 타일은 카카오 SDK 가 그리므로 항상 밝다.

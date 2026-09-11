@@ -1,0 +1,206 @@
+// 가게 하나를 자세히 본다. 모바일에서는 바텀시트, 데스크톱에서는 패널 안에 들어간다.
+//
+// 카드가 "비교" 를 맡으므로 여기서는 "판단에 필요한 나머지" 를 편다.
+// 소스별 표본 크기를 막대로 같이 보여 주는 이유는, 점수 차이가 표본 차이에서
+// 오는 것인지 실제 평가 차이인지 숫자만으로는 안 보이기 때문이다.
+
+import { X, Clock, UtensilsCrossed, Tag, CalendarCheck, Navigation } from 'lucide-react';
+import type { Place, Ratings } from '../types';
+import { BrandDot, brandName, type Brand } from './BrandDot';
+import { PlaceLinks } from './PlaceLinks';
+import { colorOf } from '../lib/categories';
+import { formatCount, formatPrice, formatScore, rawOf, summarize, type SourceMeans } from '../lib/rating';
+import { openStatus } from '../lib/hours';
+
+interface Props {
+  place: Place;
+  ratings?: Ratings;
+  means: SourceMeans;
+  googleEnabled: boolean;
+  onClose: () => void;
+}
+
+const DAYS = ['일', '월', '화', '수', '목', '금', '토'];
+
+function Section({ icon, title, children }: { icon: React.ReactNode; title: string; children: React.ReactNode }) {
+  return (
+    <section className="pt-3 mt-3 border-t border-line-subtle">
+      <h4 className="flex items-center gap-1.5 text-xs font-bold text-fg-muted m-0 mb-2">
+        <span aria-hidden="true" className="text-fg-subtle">{icon}</span>
+        {title}
+      </h4>
+      {children}
+    </section>
+  );
+}
+
+export function PlaceSheet({ place, ratings, means, googleEnabled, onClose }: Props) {
+  const sum = summarize(ratings, means);
+  const status = openStatus(ratings?.kakao?.hours);
+  const price = formatPrice(ratings?.kakao?.price);
+  const k = ratings?.kakao;
+  const n = ratings?.naver;
+
+  const rows = (['naver', 'kakao', 'google'] as Brand[]).map((b) => ({ brand: b, raw: rawOf(ratings, b) }));
+  const maxN = Math.max(1, ...rows.map((r) => r.raw?.n ?? 0));
+
+  // 오늘이 배열의 0번이다. 요일 이름을 오늘부터 돌려 붙인다.
+  const todayIdx = new Date().getDay();
+
+  return (
+    <div className="flex flex-col h-full overflow-hidden">
+      <header className="px-4 pt-3 pb-3 shrink-0 flex items-start justify-between gap-2 border-b border-line-subtle">
+        <div className="min-w-0">
+          <div className="flex items-center gap-1.5">
+            <span aria-hidden="true" className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: colorOf(place.category) }} />
+            <h3 className="font-bold text-lg text-fg m-0 truncate">{place.name}</h3>
+          </div>
+          <p className="mt-1 m-0 flex flex-wrap items-center gap-x-1.5 text-xs text-fg-muted">
+            <span className="bg-surface-fill px-2 py-0.5 rounded-full font-medium">{place.category}</span>
+            {place.mcidName && <span>{place.mcidName}</span>}
+            {price && <span className="tabular-nums">· {price}</span>}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="닫기"
+          className="grid place-items-center w-11 h-11 -mr-2 -mt-1 shrink-0 rounded-lg text-fg-subtle hover:text-fg hover:bg-surface-pressed transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+        >
+          <X className="w-5 h-5" />
+        </button>
+      </header>
+
+      <div className="flex-1 overflow-y-auto px-4 pb-4 pt-3">
+        {k?.rank && (
+          <p className="m-0 mb-3 inline-block text-xs font-medium text-primary-fg bg-primary-weak px-2.5 py-1 rounded-full">
+            {k.rank.text}{k.rank.n ? ` ${k.rank.n}위` : ''}
+          </p>
+        )}
+
+        {/* 평점 비교 */}
+        <div className="rounded-xl border border-line bg-surface-fill/50 p-3">
+          <div className="flex items-baseline justify-between gap-2 mb-2.5">
+            <span className="text-xs font-bold text-fg-muted">평점 비교</span>
+            {sum.combined != null && (
+              <span className="text-xs text-fg-subtle">
+                통합 <span className="font-bold text-fg tabular-nums">{sum.combined.toFixed(1)}</span>
+                <span className="ml-1">· 신뢰 {sum.confidence === 'high' ? '높음' : '낮음'}</span>
+              </span>
+            )}
+          </div>
+
+          <ul className="m-0 p-0 list-none flex flex-col gap-2">
+            {rows.map(({ brand, raw }) => (
+              <li key={brand} className="flex items-center gap-2">
+                <BrandDot brand={brand} size={18} />
+                <span className="text-xs text-fg-muted w-11 shrink-0">{brandName(brand)}</span>
+                <span className="text-sm font-semibold tabular-nums w-9 shrink-0 text-fg">
+                  {formatScore(raw?.score ?? null)}
+                </span>
+                <span className="flex-1 min-w-0">
+                  <span className="block h-1.5 rounded-full bg-surface-fill overflow-hidden">
+                    <span
+                      className="block h-full rounded-full bg-line-strong"
+                      style={{ width: `${((raw?.n ?? 0) / maxN) * 100}%` }}
+                    />
+                  </span>
+                </span>
+                <span className="text-[11px] text-fg-subtle tabular-nums w-14 text-right shrink-0">
+                  {raw ? formatCount(raw.n) : '—'}
+                </span>
+              </li>
+            ))}
+          </ul>
+
+          {/* 블로그 리뷰는 별점과 다른 성격이라 막대에 섞지 않고 따로 적는다. */}
+          {(n?.blogs || k?.blogs) ? (
+            <p className="m-0 mt-2.5 text-[11px] text-fg-subtle tabular-nums">
+              블로그 리뷰
+              {n?.blogs ? ` · 네이버 ${formatCount(n.blogs)}` : ''}
+              {k?.blogs ? ` · 카카오 ${formatCount(k.blogs)}` : ''}
+            </p>
+          ) : null}
+
+          {sum.caution && (
+            <p className="m-0 mt-2 text-[11px] text-[var(--matpin-closing)]">{sum.caution}</p>
+          )}
+          {googleEnabled && ratings?.google && (
+            <p className="m-0 mt-2 text-[10px] text-fg-subtle">구글 평점 제공: Google</p>
+          )}
+        </div>
+
+        {k?.hours?.length ? (
+          <Section icon={<Clock className="w-3.5 h-3.5" />} title="영업시간">
+            {status.text && (
+              <p className="m-0 mb-1.5 text-sm font-medium text-fg">{status.text}</p>
+            )}
+            <ul className="m-0 p-0 list-none grid gap-0.5">
+              {k.hours.map((h, i) => (
+                <li key={i} className="flex gap-3 text-xs">
+                  <span className={`w-6 shrink-0 ${i === 0 ? 'font-bold text-fg' : 'text-fg-muted'}`}>
+                    {DAYS[(todayIdx + i) % 7]}
+                  </span>
+                  <span className={`tabular-nums ${h.trim() ? (i === 0 ? 'text-fg' : 'text-fg-muted') : 'text-fg-subtle'}`}>
+                    {h.trim() || '휴무'}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </Section>
+        ) : null}
+
+        {k?.menus?.length ? (
+          <Section icon={<UtensilsCrossed className="w-3.5 h-3.5" />} title="대표 메뉴">
+            <ul className="m-0 p-0 list-none grid gap-1">
+              {k.menus.map((m, i) => (
+                <li key={i} className="flex items-baseline justify-between gap-3 text-sm">
+                  <span className="text-fg truncate">{m.name}</span>
+                  <span className="text-fg-muted tabular-nums shrink-0">
+                    {m.price ? `${m.price.toLocaleString()}원` : ''}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </Section>
+        ) : null}
+
+        {n?.keywords?.length ? (
+          // 네이버가 별점 대신 쓰는 키워드 리뷰. 몇 명이 골랐는지까지 있어야 의미가 산다.
+          <Section icon={<Tag className="w-3.5 h-3.5" />} title="방문자가 고른 점">
+            <ul className="m-0 p-0 list-none flex flex-wrap gap-1.5">
+              {n.keywords.map((w) => (
+                <li
+                  key={w.t}
+                  className="flex items-baseline gap-1 text-xs bg-surface-fill text-fg-muted px-2 py-1 rounded-full"
+                >
+                  {w.t}
+                  <span className="text-fg-subtle tabular-nums">{formatCount(w.n)}</span>
+                </li>
+              ))}
+            </ul>
+          </Section>
+        ) : null}
+
+        <Section icon={<Navigation className="w-3.5 h-3.5" />} title="위치">
+          <p className="m-0 text-sm text-fg-muted">{place.address}</p>
+        </Section>
+
+        <div className="mt-4 flex flex-col gap-2">
+          <PlaceLinks place={place} />
+          {n?.booking && (
+            <a
+              href={n.booking}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center justify-center gap-1.5 min-h-11 rounded-lg bg-primary text-on-primary font-semibold text-sm hover:bg-primary-pressed transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+            >
+              <CalendarCheck className="w-4 h-4" aria-hidden="true" />
+              네이버로 예약
+            </a>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}

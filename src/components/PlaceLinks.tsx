@@ -1,21 +1,22 @@
-import { Place } from '../data/places';
+import type { Place } from '../types';
+import { BrandDot } from './BrandDot';
 
 // 네이버·카카오·구글 지도로 보내는 버튼 묶음.
-// PlaceList 카드와 지도 오버레이가 같은 것을 쓰고 있었는데 각자 복사본을 들고 있었다.
 //
-// 세 브랜드 색은 토큰화하지 않는다. 맛핀 테마가 바뀌어도 사용자가 버튼을 알아봐야 한다.
-// 다만 예전처럼 색 배경을 칠하지는 않는다. 카드마다 초록·노랑·파랑이 반복되면
-// 목록 전체가 색 소음이 되어 정작 선택된 항목이 안 보였다.
-// 이제 배경은 중립이고 브랜드 색은 앞의 동그란 표식에만 남긴다.
+// 카카오는 place ID 를 알면 상세 페이지로 바로 보낸다. 매칭이 안 된 곳만 검색 URL 로 떨어진다.
+// (예전에는 항상 검색 URL 이었다. REST 키를 번들에 넣지 않으려는 이유였는데,
+//  이제 ID 를 빌드 타임에 붙이므로 키 없이도 딥링크가 된다.)
 
-function kakaoSearchUrl(place: Place) {
-  // 예전에는 카카오 REST API 로 place id 를 찾아 딥링크를 만들었다.
-  // 그 키는 VITE_ 접두라 번들에 그대로 노출됐다. 키 없이 되는 검색 링크로 바꾼다.
-  return `https://map.kakao.com/?q=${encodeURIComponent(`${place.name} ${place.address}`)}`;
+function kakaoUrl(place: Place) {
+  return place.kakaoId
+    ? `https://place.map.kakao.com/${place.kakaoId}`
+    : `https://map.kakao.com/?q=${encodeURIComponent(`${place.name} ${place.address}`)}`;
 }
 
 function googleUrl(place: Place) {
-  return `https://www.google.com/maps/search/${encodeURIComponent(place.name)}/@${place.lat},${place.lng},17z`;
+  return place.googlePlaceId
+    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place.name)}&query_place_id=${place.googlePlaceId}`
+    : `https://www.google.com/maps/search/${encodeURIComponent(place.name)}/@${place.lat},${place.lng},17z`;
 }
 
 // 사이드바가 좁을 때(모바일 320px) 세 버튼이 한 줄에 들어가야 한다.
@@ -25,32 +26,20 @@ const LINK_CLASS =
   'bg-surface-fill hover:bg-surface-pressed transition-colors ' +
   'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary';
 
-function Dot({ color, label, dark }: { color: string; label: string; dark?: boolean }) {
-  return (
-    <span
-      aria-hidden="true"
-      className="grid place-items-center w-[18px] h-[18px] rounded-full shrink-0 text-[10px] font-bold"
-      style={{ background: color, color: dark ? '#111' : '#fff' }}
-    >
-      {label}
-    </span>
-  );
-}
-
 export function PlaceLinks({ place }: { place: Place }) {
   const stop = (e: React.MouseEvent) => e.stopPropagation();
   return (
     <div className="flex gap-2">
       <a href={place.naverUrl} target="_blank" rel="noopener noreferrer" onClick={stop} className={LINK_CLASS}>
-        <Dot color="var(--matpin-brand-naver)" label="N" />
+        <BrandDot brand="naver" />
         <span className="text-xs font-medium text-fg whitespace-nowrap">네이버</span>
       </a>
-      <a href={kakaoSearchUrl(place)} target="_blank" rel="noopener noreferrer" onClick={stop} className={LINK_CLASS}>
-        <Dot color="var(--matpin-brand-kakao)" label="K" dark />
+      <a href={kakaoUrl(place)} target="_blank" rel="noopener noreferrer" onClick={stop} className={LINK_CLASS}>
+        <BrandDot brand="kakao" />
         <span className="text-xs font-medium text-fg whitespace-nowrap">카카오</span>
       </a>
       <a href={googleUrl(place)} target="_blank" rel="noopener noreferrer" onClick={stop} className={LINK_CLASS}>
-        <Dot color="var(--matpin-brand-google)" label="G" />
+        <BrandDot brand="google" />
         <span className="text-xs font-medium text-fg whitespace-nowrap">구글</span>
       </a>
     </div>
