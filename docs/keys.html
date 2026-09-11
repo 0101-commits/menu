@@ -242,9 +242,9 @@ npm run build:data   # public/data/*.json 생성 + 게이트 검사</code></pre>
 <thead><tr><th>확인 대상</th><th>명령</th><th>성공 시 보이는 출력</th></tr></thead>
 <tbody>
 <tr><td>카카오 JS 앱키 도메인</td><td>배포 주소 또는 <code>http://localhost:5173</code> 접속</td><td>지도 타일이 뜬다 (회색 빈 박스가 아님)</td></tr>
-<tr><td>카카오 REST 키</td><td><code>npm run match</code></td><td><code>matched N/4084 (kakao)</code> 형태 요약, <code>KAKAO_AUTH</code> 오류 없음</td></tr>
-<tr><td>구글 키</td><td><code>npm run match</code></td><td><code>matched N/4084 (google)</code> 요약, <code>REQUEST_DENIED</code> 없음</td></tr>
-<tr><td>평점 수집</td><td><code>npm run ratings</code></td><td>가게별 rating 값이 채워진 JSON 로그</td></tr>
+<tr><td>카카오 REST 키</td><td><code>npm run match</code></td><td><code>카카오 high 3512/med 210/미매칭 …</code> 요약과 <code>이번 회차 카카오 매칭률 …%</code>. <code>KAKAO_AUTH</code> 오류 없음</td></tr>
+<tr><td>구글 키</td><td><code>npm run match</code></td><td>같은 요약 줄에 <code>구글 high …/med …</code> 가 함께 나온다. <code>GOOGLE_AUTH</code> 오류 없음</td></tr>
+<tr><td>평점 수집</td><td><code>npm run ratings</code></td><td><code>25/4084 (0.6%) · 네이버 점수 24 / 점수없음 1 / 실패 0 …</code> 진행 줄이 25건마다</td></tr>
 <tr><td>GitHub Actions</td><td>Actions 탭에서 최근 워크플로 실행 확인</td><td>초록 체크, 빨간 X 없음</td></tr>
 </tbody>
 </table>

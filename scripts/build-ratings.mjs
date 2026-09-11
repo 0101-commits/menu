@@ -38,7 +38,7 @@ for (const [sid, v] of Object.entries(raw)) {
   const n = v.naver;
   if (n) {
     if (n.error) stat.naverFail++;
-    else if (n.gone) { stat.naverGone++; closedList.push(`${place.name} — 네이버 페이지 없음`); }
+    else if (n.gone) { stat.naverGone++; closedList.push(`${place.name} — 네이버 페이지 없음`); entry.closed = true; }
     else if (n.parseError) stat.naverFail++;
     else {
       if (n.score == null) stat.naverNoScore++; else stat.naverScore++;
@@ -60,7 +60,7 @@ for (const [sid, v] of Object.entries(raw)) {
     if (k.error || k.gone) stat.kakaoFail++;
     else {
       if (k.score != null) stat.kakaoScore++;
-      if (k.closed) { stat.closed++; closedList.push(`${place.name} — 카카오 영업상태 아님`); }
+      if (k.closed) { stat.closed++; closedList.push(`${place.name} — 카카오 영업상태 아님`); entry.closed = true; }
       entry.kakao = {
         score: k.score ?? null,
         count: k.count ?? 0,

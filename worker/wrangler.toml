@@ -1,6 +1,7 @@
 # 온디맨드 평점 Worker.
 #
-# 배포
+# 배포 (이 폴더에서 실행한다 — cd worker)
+#   0) 로그인          npx wrangler login
 #   1) KV 만들기        npx wrangler kv namespace create RATINGS
 #      출력된 id 를 아래 kv_namespaces 의 id 에 넣는다.
 #   2) 구글 키(선택)    npx wrangler secret put GOOGLE_PLACES_KEY

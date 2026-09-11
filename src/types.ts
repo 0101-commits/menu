@@ -60,6 +60,8 @@ export interface Ratings {
   naver?: NaverRating;
   kakao?: KakaoRating;
   google?: GoogleRating;
+  /** 네이버 페이지가 사라졌거나 카카오 영업상태가 Y 가 아니다. 폐업 의심. */
+  closed?: boolean;
 }
 
 /** 키는 Place.placeId (네이버 sid) */

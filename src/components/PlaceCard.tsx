@@ -96,6 +96,11 @@ export function PlaceCard({
           )}
         </span>
 
+        {ratings?.closed && (
+          <span className="mt-1.5 mr-1.5 inline-block text-[11px] font-medium text-[var(--matpin-closing)] bg-surface-fill px-2 py-0.5 rounded-full">
+            폐업 추정
+          </span>
+        )}
         {rank && (
           <span className="mt-1.5 inline-block text-[11px] font-medium text-primary-fg bg-primary-weak px-2 py-0.5 rounded-full">
             {rank.text}
