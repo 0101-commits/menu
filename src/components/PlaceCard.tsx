@@ -6,7 +6,7 @@
 // 카드를 통째로 버튼으로 감싸지 않는다. 안에 외부 링크가 들어가면 버튼 중첩이 된다.
 // 제목 영역만 버튼이고 링크·상세는 형제로 둔다.
 
-import { ChevronRight } from 'lucide-react';
+import { ChevronRight, Check } from 'lucide-react';
 import type { Place, Ratings } from '../types';
 import { RatingRow } from './RatingRow';
 import { colorOf } from '../lib/categories';
@@ -25,6 +25,7 @@ interface Props {
   means: SourceMeans;
   googleEnabled: boolean;
   ratingsLoading: boolean;
+  visited: boolean;
 }
 
 const STATE_CLASS: Record<string, string> = {
@@ -36,7 +37,7 @@ const STATE_CLASS: Record<string, string> = {
 };
 
 export function PlaceCard({
-  place, ratings, distanceKm, selected, onSelect, onDetail, means, googleEnabled, ratingsLoading,
+  place, ratings, distanceKm, selected, onSelect, onDetail, means, googleEnabled, ratingsLoading, visited,
 }: Props) {
   const status = openStatus(ratings?.kakao?.hours);
   const price = formatPrice(ratings?.kakao?.price);
@@ -63,6 +64,9 @@ export function PlaceCard({
               style={{ background: colorOf(place.category) }}
             />
             <span className="font-bold text-fg text-[15px] truncate">{place.name}</span>
+            {visited && (
+              <Check className="w-3.5 h-3.5 shrink-0 text-[var(--matpin-open)]" aria-label="가본 곳" />
+            )}
           </span>
           <span className="flex items-center gap-1 shrink-0">
             {distanceKm != null && (

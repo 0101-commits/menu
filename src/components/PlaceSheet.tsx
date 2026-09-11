@@ -4,7 +4,7 @@
 // 소스별 표본 크기를 막대로 같이 보여 주는 이유는, 점수 차이가 표본 차이에서
 // 오는 것인지 실제 평가 차이인지 숫자만으로는 안 보이기 때문이다.
 
-import { X, Clock, UtensilsCrossed, Tag, CalendarCheck, Navigation } from 'lucide-react';
+import { X, Clock, UtensilsCrossed, Tag, CalendarCheck, Navigation, Check } from 'lucide-react';
 import type { Place, Ratings } from '../types';
 import { BrandDot, brandName, type Brand } from './BrandDot';
 import { PlaceLinks } from './PlaceLinks';
@@ -18,6 +18,9 @@ interface Props {
   means: SourceMeans;
   googleEnabled: boolean;
   onClose: () => void;
+  visit?: { at: string; note?: string };
+  onToggleVisit: (placeId: string) => void;
+  onNote: (placeId: string, note: string) => void;
 }
 
 const DAYS = ['일', '월', '화', '수', '목', '금', '토'];
@@ -34,7 +37,9 @@ function Section({ icon, title, children }: { icon: React.ReactNode; title: stri
   );
 }
 
-export function PlaceSheet({ place, ratings, means, googleEnabled, onClose }: Props) {
+export function PlaceSheet({
+  place, ratings, means, googleEnabled, onClose, visit, onToggleVisit, onNote,
+}: Props) {
   const sum = summarize(ratings, means);
   const status = openStatus(ratings?.kakao?.hours);
   const price = formatPrice(ratings?.kakao?.price);
@@ -184,6 +189,37 @@ export function PlaceSheet({ place, ratings, means, googleEnabled, onClose }: Pr
 
         <Section icon={<Navigation className="w-3.5 h-3.5" />} title="위치">
           <p className="m-0 text-sm text-fg-muted">{place.address}</p>
+        </Section>
+
+        {/* 방문 기록은 이 브라우저에만 남는다. 네이버 즐겨찾기는 읽기만 하기 때문이다. */}
+        <Section icon={<Check className="w-3.5 h-3.5" />} title="내 기록">
+          <button
+            type="button"
+            onClick={() => onToggleVisit(place.placeId)}
+            aria-pressed={Boolean(visit)}
+            className={`flex items-center gap-1.5 min-h-11 px-3 rounded-lg text-sm font-medium border transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${
+              visit
+                ? 'bg-primary-weak text-primary-fg border-primary'
+                : 'bg-surface text-fg-muted border-line hover:bg-surface-pressed'
+            }`}
+          >
+            <Check className="w-4 h-4" aria-hidden="true" />
+            {visit ? `가봤음 · ${visit.at.slice(0, 10)}` : '가봤어요'}
+          </button>
+
+          {visit && (
+            <>
+              <label className="sr-only" htmlFor={`note-${place.placeId}`}>메모</label>
+              <textarea
+                id={`note-${place.placeId}`}
+                defaultValue={visit.note ?? ''}
+                onBlur={(e) => onNote(place.placeId, e.target.value)}
+                placeholder="다음에 뭘 시킬지, 누구와 갔는지"
+                rows={2}
+                className="mt-2 w-full text-sm rounded-lg p-2 bg-surface text-fg border border-line resize-y focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+              />
+            </>
+          )}
         </Section>
 
         <div className="mt-4 flex flex-col gap-2">

@@ -39,8 +39,29 @@ jobs:
       - name: 신규 장소 보강
         run: node scripts/enrich.mjs --only-new
 
-      - name: places.ts 생성 + 게이트
+      # 카카오·구글 장소 ID 붙이기. 키가 없으면 그 소스만 건너뛰고 계속 간다.
+      - name: 외부 장소 ID 매칭
+        env:
+          KAKAO_REST_KEY: ${{ secrets.KAKAO_REST_KEY }}
+          GOOGLE_PLACES_KEY: ${{ secrets.GOOGLE_PLACES_KEY }}
+        run: node scripts/match.mjs
+
+      - name: places.json 생성 + 게이트
         run: node scripts/build-places.mjs
+
+      # 전량은 75분이 걸린다. 주마다 1/4씩 돌아 한 달이면 한 바퀴다.
+      # raw/ 는 커밋되지 않으므로 매 실행이 빈 상태에서 시작한다 —
+      # 이미 있는 값은 public/data/ratings.json 에서 되살리고, 이번 주 몫만 다시 받는다.
+      - name: 평점 수집 (주간 1/4)
+        run: |
+          node scripts/restore-ratings.mjs
+          node scripts/ratings.mjs --force --shard=$(( ($(date +%V) % 4) + 1 ))/4
+
+      - name: ratings.json 생성 + 게이트
+        run: node scripts/build-ratings.mjs
+
+      - name: 규칙 검사
+        run: npm run test
 
       - name: 타입 검사
         run: npm run typecheck
@@ -67,7 +88,8 @@ jobs:
           body: ${{ steps.report.outputs.body }}
           commit-message: 'chore(data): 네이버 즐겨찾기 동기화'
           add-paths: |
-            src/data/places.ts
+            public/data/places.json
+            public/data/ratings.json
           delete-branch: true
 
       # 조용히 실패하지 않게. 쿠키 만료가 가장 흔한 원인이다.

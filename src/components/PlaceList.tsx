@@ -24,11 +24,13 @@ interface Props {
   /** 거리 표시의 기준점. 없으면 거리를 안 보여준다. */
   origin: { lat: number; lng: number } | null;
   emptyHint?: string;
+  /** 가본 곳 placeId 모음 */
+  visited: Set<string>;
 }
 
 export function PlaceList({
   places, ratings, means, googleEnabled, ratingsLoading,
-  selectedPlaceId, onSelect, onDetail, origin, emptyHint,
+  selectedPlaceId, onSelect, onDetail, origin, emptyHint, visited,
 }: Props) {
   const [limit, setLimit] = useState(PAGE);
   const sentinel = useRef<HTMLLIElement>(null);
@@ -79,6 +81,7 @@ export function PlaceList({
           means={means}
           googleEnabled={googleEnabled}
           ratingsLoading={ratingsLoading}
+          visited={visited.has(place.placeId)}
         />
       ))}
       {limit < places.length && (

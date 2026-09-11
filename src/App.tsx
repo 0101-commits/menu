@@ -24,6 +24,7 @@ import { isOpenNow } from './lib/hours';
 import { discoverNearby, geocodePlace } from './lib/kakao';
 import { GOOGLE_ENABLED, RATINGS_API, fetchRatings } from './lib/worker';
 import { readUrl, writeUrl, type SortKey } from './lib/url-state';
+import { useVisits } from './lib/visits';
 
 type ColorScheme = 'light' | 'dark';
 
@@ -60,6 +61,7 @@ export default function App() {
   const [region, setRegion] = useState({ sido: '', sigungu: '', dong: '' });
   const [openOnly, setOpenOnly] = useState(Boolean(initial.open));
   const [minScore, setMinScore] = useState<number | null>(initial.min ?? null);
+  const [unvisitedOnly, setUnvisitedOnly] = useState(false);
   const [sort, setSort] = useState<SortKey>(initial.sort ?? 'distance');
   const [geocoding, setGeocoding] = useState(false);
   const [searchNotice, setSearchNotice] = useState<string | null>(null);
@@ -77,6 +79,9 @@ export default function App() {
   const [discoveredRatings, setDiscoveredRatings] = useState<RatingsMap>({});
 
   // ---------- 껍데기 ----------
+  const { visits, toggle: toggleVisit, setNote } = useVisits();
+  const visitedIds = useMemo(() => new Set(Object.keys(visits)), [visits]);
+
   const desktop = useDesktop();
   const [snap, setSnap] = useState<Snap>('half');
   const [colorScheme, setColorScheme] = useState<ColorScheme>(readColorScheme);
@@ -247,6 +252,7 @@ export default function App() {
       list = searchPlaces(index, textFilter).filter((p) => allowed.has(p.placeId));
     }
 
+    if (unvisitedOnly) list = list.filter((p) => !visitedIds.has(p.placeId));
     if (openOnly) list = list.filter((p) => isOpenNow(ratings[p.placeId]?.kakao?.hours));
     if (minScore != null) {
       list = list.filter((p) => {
@@ -268,7 +274,7 @@ export default function App() {
       sorted.sort((a, b) => n(b) - n(a));
     }
     return sorted;
-  }, [places, visiblePlaces, near, radius, scope, region, categories, textFilter, index, openOnly, minScore, ratings, means, sort, origin]);
+  }, [places, visiblePlaces, near, radius, scope, region, categories, textFilter, index, openOnly, minScore, ratings, means, sort, origin, unvisitedOnly, visitedIds]);
 
   // 검색어가 있으면 정렬이 이미 관련도 순이다. 거리순을 강제하지 않는다.
   const canSortDistance = Boolean(origin);
@@ -316,6 +322,29 @@ export default function App() {
     try { localStorage.setItem('matpin-color-scheme', next); } catch { /* 프라이빗 모드 */ }
     setColorScheme(next);
   };
+
+  // 현위치 1km · 영업 중 · 평점순을 한 번에 건다. 저녁마다 하는 그 질문 하나를 위한 지름길.
+  const pickNow = useCallback(() => {
+    if (!navigator.geolocation) { setSearchNotice('이 브라우저는 위치 기능을 지원하지 않습니다.'); return; }
+    setGeocoding(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setNear({ label: '내 위치', lat: pos.coords.latitude, lng: pos.coords.longitude });
+        setRadius(1000);
+        setOpenOnly(true);
+        setSort('rating');
+        setQuery('');
+        setTextFilter('');
+        setSearchNotice(null);
+        setGeocoding(false);
+      },
+      () => {
+        setSearchNotice('위치를 못 가져왔습니다. 주소창 왼쪽 자물쇠 아이콘 > 위치 > 허용으로 바꾼 뒤 다시 눌러주세요.');
+        setGeocoding(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000 },
+    );
+  }, []);
 
   const pickRandom = () => {
     if (!filtered.length) return;
@@ -409,6 +438,9 @@ export default function App() {
             means={means}
             googleEnabled={GOOGLE_ENABLED}
             onClose={() => setDetailPlace(null)}
+            visit={visits[detailPlace.placeId]}
+            onToggleVisit={toggleVisit}
+            onNote={setNote}
           />
         ) : (
           <>
@@ -431,6 +463,9 @@ export default function App() {
               canSortDistance={canSortDistance}
               discover={discover}
               onDiscoverChange={setDiscover}
+              unvisitedOnly={unvisitedOnly}
+              onUnvisitedOnlyChange={setUnvisitedOnly}
+              onPickNow={pickNow}
               total={places.length}
             />
 
@@ -467,6 +502,7 @@ export default function App() {
                 onSelect={handleSelect}
                 onDetail={handleDetail}
                 origin={origin}
+                visited={visitedIds}
                 emptyHint={
                   near
                     ? `${near.label} ${radius >= 1000 ? `${radius / 1000}km` : `${radius}m`} 안에 없습니다. 반경을 넓혀 보세요.`

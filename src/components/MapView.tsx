@@ -519,9 +519,13 @@ export function MapView({
           <div className={`text-center ${PANEL} p-6 max-w-sm`}>
             <Compass className="w-8 h-8 mx-auto mb-3 text-fg-subtle" aria-hidden="true" />
             <p className="font-bold text-lg mb-2 text-fg">지도를 불러오지 못했습니다</p>
+            {/* 실제로 가장 흔한 원인은 네트워크가 아니라 도메인 미등록이다.
+                카카오 SDK 는 콘솔에 등록한 도메인에서만 내려온다(그 밖에서는 401). */}
             <p className="text-sm text-fg-muted m-0">
-              네트워크 연결을 확인한 뒤 새로고침해 주세요. 목록과 검색은 그대로 쓸 수 있습니다.
+              이 주소({typeof window !== 'undefined' ? window.location.origin : ''})가 카카오 개발자
+              콘솔에 등록돼 있는지 확인해 주세요. 네트워크 문제일 수도 있습니다.
             </p>
+            <p className="text-sm text-fg-muted m-0 mt-2">목록과 검색은 그대로 쓸 수 있습니다.</p>
           </div>
         </div>
       )}

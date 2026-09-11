@@ -4,7 +4,7 @@
 // 예전에는 "지도 범위 / 전체" 가 스위치였는데, 두 상태가 대등하므로 세그먼트가 맞다.
 // 스위치는 "켜고 끄는 하나" 를 뜻한다.
 
-import { Search, X, SlidersHorizontal } from 'lucide-react';
+import { Search, X, SlidersHorizontal, Sparkles } from 'lucide-react';
 import { TextField, SegmentedControl } from '@seed-design/react';
 import type { SortKey } from '../lib/url-state';
 
@@ -35,6 +35,11 @@ interface Props {
   discover: boolean;
   onDiscoverChange: (v: boolean) => void;
 
+  unvisitedOnly: boolean;
+  onUnvisitedOnlyChange: (v: boolean) => void;
+  /** 현위치 1km · 영업 중 · 평점순을 한 번에 건다 */
+  onPickNow: () => void;
+
   total: number;
 }
 
@@ -49,7 +54,8 @@ export function ListToolbar({
   query, onQueryChange, onSubmit, scope, onScopeChange,
   nearLabel, radius, onRadiusChange, onClearNear,
   openOnly, onOpenOnlyChange, minScore, onMinScoreChange,
-  sort, onSortChange, canSortDistance, discover, onDiscoverChange, total,
+  sort, onSortChange, canSortDistance, discover, onDiscoverChange,
+  unvisitedOnly, onUnvisitedOnlyChange, onPickNow, total,
 }: Props) {
   return (
     <div className="px-3 pt-3 pb-2 border-b border-line-subtle shrink-0 flex flex-col gap-2">
@@ -109,9 +115,29 @@ export function ListToolbar({
       )}
 
       <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-hide" role="group" aria-label="필터">
+        {/* 토글이 아니라 한 번에 여러 조건을 거는 지름길이라 생김새를 다르게 둔다. */}
+        <button
+          type="button"
+          onClick={onPickNow}
+          className="shrink-0 inline-flex items-center gap-1 min-h-9 px-3 rounded-full text-xs font-semibold bg-primary text-on-primary hover:bg-primary-pressed transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+        >
+          <Sparkles className="w-3.5 h-3.5" aria-hidden="true" />
+          지금 갈 만한 곳
+        </button>
+
+        <span className="shrink-0 w-px h-4 bg-line mx-0.5" aria-hidden="true" />
+
         <SlidersHorizontal className="w-3.5 h-3.5 shrink-0 text-fg-subtle" aria-hidden="true" />
         <button type="button" onClick={() => onOpenOnlyChange(!openOnly)} className={chip(openOnly)} aria-pressed={openOnly}>
           영업 중
+        </button>
+        <button
+          type="button"
+          onClick={() => onUnvisitedOnlyChange(!unvisitedOnly)}
+          className={chip(unvisitedOnly)}
+          aria-pressed={unvisitedOnly}
+        >
+          안 가본 곳
         </button>
         <button
           type="button"
