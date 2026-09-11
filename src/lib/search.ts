@@ -62,8 +62,9 @@ export function parseQuery(q: string): ParsedQuery {
   const rest: string[] = [];
   for (const t of tokens) {
     const cat = (CATEGORIES as readonly string[]).includes(t) ? t : ALIAS[t];
-    if (cat && !categories.includes(cat)) categories.push(cat);
-    else rest.push(t);
+    if (!cat) { rest.push(t); continue; }
+    // 같은 분류를 두 번 쳐도("일식 일식") 두 번째가 자유 검색어로 새지 않게 한다.
+    if (!categories.includes(cat)) categories.push(cat);
   }
   return { categories, text: rest.join(' ') };
 }

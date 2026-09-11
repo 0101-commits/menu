@@ -41,8 +41,13 @@ export interface KakaoRating {
   blogs: number;
   /** ₩ 개수. 1~4 */
   price?: number;
-  /** 오늘부터 7일. "14:00 ~ 24:00" 형태, 휴무는 빈 문자열 */
+  /** 수집일부터 7일. "14:00 ~ 24:00" 형태, 휴무는 빈 문자열 */
   hours?: string[];
+  /**
+   * hours[0] 이 무슨 요일인지(0=일). 카카오는 "오늘부터 7일" 을 주는데 그 "오늘" 은
+   * 수집한 날이다. 보는 날과 며칠 어긋났는지 알아야 요일을 맞게 읽는다.
+   */
+  hoursDay?: number;
   menus?: { name: string; price: number }[];
   rank?: { text: string; n?: number };
   closed?: boolean;

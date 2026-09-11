@@ -11,7 +11,7 @@
 import assert from 'node:assert/strict';
 import { parseRegion } from './lib/region.mjs';
 import { parseNaver, parseKakao } from '../shared/parse-place.mjs';
-import { openStatus, isOpenNow } from '../src/lib/hours.ts';
+import { openStatus, isOpenNow, todayIndex } from '../src/lib/hours.ts';
 import { summarize, computeMeans, formatCount, formatPrice } from '../src/lib/rating.ts';
 import { parseQuery, toChoseong, isChoseongQuery, buildIndex, searchPlaces } from '../src/lib/search.ts';
 import { readUrl, toSearch } from '../src/lib/url-state.ts';
@@ -76,6 +76,18 @@ it('자정을 넘긴 영업을 닫힌 걸로 보지 않는다', () => {
   const hours = ['18:00 ~ 02:00', '', '', '', '', '', ''];
   assert.equal(openStatus(hours, at(23)).state, 'open');
   assert.equal(isOpenNow(hours, at(1)), true);
+});
+
+it('수집한 요일과 보는 요일이 다르면 칸을 민다', () => {
+  // 카카오 배열은 "수집한 날부터 7일" 이다. 화요일(2)에 받은 배열을 금요일(5)에 보면
+  // 세 칸 뒤(인덱스 3)가 그날이다. 이걸 안 밀면 금요일에 화요일 영업시간을 적용한다.
+  const hours = ['00:00 ~ 01:00', '', '', '11:00 ~ 22:00', '', '', ''];
+  const friday = new Date(2026, 0, 2, 15); // 2026-01-02 는 금요일
+  assert.equal(friday.getDay(), 5);
+  assert.equal(openStatus(hours, friday, 2).state, 'open');   // 인덱스 3 = 11:00~22:00
+  assert.equal(openStatus(hours, friday, 5).state, 'closed'); // 인덱스 0 = 00:00~01:00
+  assert.equal(todayIndex(2, friday), 3);
+  assert.equal(todayIndex(undefined, friday), 0); // 모르면 예전대로 0 번
 });
 
 it('오늘이 빈 문자열이면 휴무', () => {
@@ -144,6 +156,8 @@ it('수와 가격 표기', () => {
 // ---------- 검색 ----------
 it('질의에서 카테고리를 떼어 낸다', () => {
   assert.deepEqual(parseQuery('강남역 일식'), { categories: ['일식'], text: '강남역' });
+  // 같은 분류를 두 번 쳐도 두 번째가 자유 검색어로 새면 안 된다.
+  assert.deepEqual(parseQuery('일식 일식'), { categories: ['일식'], text: '' });
   assert.deepEqual(parseQuery('성수동 커피'), { categories: ['카페'], text: '성수동' });
   assert.deepEqual(parseQuery('자매수산'), { categories: [], text: '자매수산' });
 });

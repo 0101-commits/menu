@@ -6,7 +6,7 @@
 // 평점은 여기서 온디맨드로 받는다. 4,000 곳을 미리 채우는 것과 달리 대상이 무한하므로
 // 빌드 타임에 준비할 수 없다. Worker 가 없으면 링크만 보인다.
 
-import { X, ExternalLink, Bookmark } from 'lucide-react';
+import { X, ExternalLink, Bookmark, RotateCw } from 'lucide-react';
 import type { Discovered, Ratings } from '../types';
 import { RatingRow } from './RatingRow';
 
@@ -16,10 +16,13 @@ interface Props {
   loading: boolean;
   /** Worker 가 설정되지 않아 평점을 받을 수 없는 상태 */
   unavailable?: boolean;
+  /** 조회했지만 실패했다. "평점 없음" 과 구분해서 보여야 한다. */
+  failed?: boolean;
+  onRetry: () => void;
   onClose: () => void;
 }
 
-export function DiscoveredWindow({ item, ratings, loading, unavailable, onClose }: Props) {
+export function DiscoveredWindow({ item, ratings, loading, unavailable, failed, onRetry, onClose }: Props) {
   return (
     <div className="bg-surface-raised text-fg rounded-xl shadow-xl border border-dashed border-line-strong p-3 w-[272px]">
       <div className="flex justify-between items-start gap-2">
@@ -47,6 +50,18 @@ export function DiscoveredWindow({ item, ratings, loading, unavailable, onClose 
       <div className="mt-2.5 pt-2.5 border-t border-line-subtle">
         {unavailable ? (
           <p className="m-0 text-[11px] text-fg-subtle">평점 조회가 설정되지 않았습니다</p>
+        ) : failed ? (
+          <div className="flex items-center justify-between gap-2">
+            <p className="m-0 text-[11px] text-[var(--matpin-closing)]">평점을 못 받아왔습니다</p>
+            <button
+              type="button"
+              onClick={onRetry}
+              className="shrink-0 inline-flex items-center gap-1 min-h-9 px-2 rounded-lg text-[11px] font-medium text-fg-muted hover:bg-surface-pressed focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+            >
+              <RotateCw className="w-3 h-3" aria-hidden="true" />
+              다시 시도
+            </button>
+          </div>
         ) : (
           <RatingRow ratings={ratings} loading={loading} />
         )}

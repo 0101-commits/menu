@@ -51,7 +51,10 @@ export function PlaceList({
     );
     io.observe(el);
     return () => io.disconnect();
-  }, [places.length]);
+    // [places.length] 로 두면 개수가 같은 채 정렬만 바뀌었을 때 다시 붙지 않는다.
+    // 위 effect 가 limit 을 되돌려 sentinel 이 새 DOM 노드로 다시 생기는데
+    // 그 노드는 한 번도 observe 되지 않아 "더 보기" 가 조용히 멎는다.
+  }, [places]);
 
   if (places.length === 0) {
     return (

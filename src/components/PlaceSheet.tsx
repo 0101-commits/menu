@@ -10,7 +10,7 @@ import { BrandDot, brandName, type Brand } from './BrandDot';
 import { PlaceLinks } from './PlaceLinks';
 import { colorOf } from '../lib/categories';
 import { formatCount, formatPrice, formatScore, rawOf, summarize, type SourceMeans } from '../lib/rating';
-import { openStatus } from '../lib/hours';
+import { openStatus, todayIndex } from '../lib/hours';
 
 interface Props {
   place: Place;
@@ -40,17 +40,20 @@ function Section({ icon, title, children }: { icon: React.ReactNode; title: stri
 export function PlaceSheet({
   place, ratings, means, googleEnabled, onClose, visit, onToggleVisit, onNote,
 }: Props) {
-  const sum = summarize(ratings, means);
-  const status = openStatus(ratings?.kakao?.hours);
-  const price = formatPrice(ratings?.kakao?.price);
   const k = ratings?.kakao;
   const n = ratings?.naver;
+  const sum = summarize(ratings, means);
+  const status = openStatus(k?.hours, undefined, k?.hoursDay);
+  const price = formatPrice(k?.price);
 
   const rows = (['naver', 'kakao', 'google'] as Brand[]).map((b) => ({ brand: b, raw: rawOf(ratings, b) }));
   const maxN = Math.max(1, ...rows.map((r) => r.raw?.n ?? 0));
 
-  // 오늘이 배열의 0번이다. 요일 이름을 오늘부터 돌려 붙인다.
-  const todayIdx = new Date().getDay();
+  // 배열의 0번은 오늘이 아니라 수집한 날이다. 요일 이름은 수집 요일부터 붙이고,
+  // 굵게 표시할 "오늘" 은 며칠 어긋났는지 계산해 찾는다.
+  const now = new Date();
+  const baseDay = k?.hoursDay ?? now.getDay();
+  const todayCell = todayIndex(k?.hoursDay, now);
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -143,10 +146,10 @@ export function PlaceSheet({
             <ul className="m-0 p-0 list-none grid gap-0.5">
               {k.hours.map((h, i) => (
                 <li key={i} className="flex gap-3 text-xs">
-                  <span className={`w-6 shrink-0 ${i === 0 ? 'font-bold text-fg' : 'text-fg-muted'}`}>
-                    {DAYS[(todayIdx + i) % 7]}
+                  <span className={`w-6 shrink-0 ${i === todayCell ? 'font-bold text-fg' : 'text-fg-muted'}`}>
+                    {DAYS[(baseDay + i) % 7]}
                   </span>
-                  <span className={`tabular-nums ${h.trim() ? (i === 0 ? 'text-fg' : 'text-fg-muted') : 'text-fg-subtle'}`}>
+                  <span className={`tabular-nums ${h.trim() ? (i === todayCell ? 'text-fg' : 'text-fg-muted') : 'text-fg-subtle'}`}>
                     {h.trim() || '휴무'}
                   </span>
                 </li>

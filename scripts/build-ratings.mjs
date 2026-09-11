@@ -69,7 +69,8 @@ for (const [sid, v] of Object.entries(raw)) {
         count: k.count ?? 0,
         blogs: k.blogs ?? 0,
         ...(k.price ? { price: k.price } : {}),
-        ...(k.hours ? { hours: k.hours } : {}),
+        // hours 는 수집한 날부터 7일이다. 며칠 지나 보는지 모르면 요일이 어긋난다.
+        ...(k.hours ? { hours: k.hours, hoursDay: new Date(k.at ?? Date.now()).getDay() } : {}),
         ...(k.menus?.length ? { menus: k.menus.slice(0, 3) } : {}),
         ...(k.rank ? { rank: k.rank } : {}),
         ...(k.closed ? { closed: true } : {}),

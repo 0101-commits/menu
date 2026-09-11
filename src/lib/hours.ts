@@ -2,10 +2,17 @@
 //
 // 카카오 panel3 이 주는 영업시간은 "오늘부터 7일" 의 문자열 배열이다.
 //   ["14:00 ~ 24:00", "", "11:30 ~ 22:00", ...]   빈 문자열 = 휴무
-// 수집 시점이 아니라 보는 시점을 기준으로 판정해야 하므로 계산은 여기서 한다.
 //
-// 24:00 을 넘기는 표기(예: "18:00 ~ 02:00")는 자정을 넘긴 영업이다. 그대로 다루면
-// 새벽 1시에 "영업 종료" 로 잘못 나온다.
+// 함정이 둘이다.
+//
+//   1) 그 "오늘" 은 보는 날이 아니라 **수집한 날**이다. 수집은 주 1회 1/4 씩 돌아
+//      한 장소의 배열이 최대 4주 고정된다. 화요일에 받은 배열을 금요일에 그대로 읽으면
+//      금요일에 화요일 영업시간을 적용한다 — 요일마다 다르거나 특정 요일 휴무인 가게에서
+//      "영업 중"·"오늘 휴무" 가 통째로 틀린다. 그래서 수집 요일(hoursDay)을 같이 받아
+//      며칠 어긋났는지 계산해 인덱스를 민다.
+//
+//   2) 24:00 을 넘기는 표기(예: "18:00 ~ 02:00")는 자정을 넘긴 영업이다. 그대로 다루면
+//      새벽 1시에 "영업 종료" 로 잘못 나온다.
 
 export type OpenState = 'open' | 'closing-soon' | 'closed' | 'dayoff' | 'unknown';
 
@@ -24,14 +31,28 @@ function toMinutes(hhmm: string): number | null {
 }
 
 /**
- * @param hours 카카오가 준 7일치 배열. 0번이 오늘이다.
- * @param now   판정 기준 시각
+ * 배열에서 "보는 날" 에 해당하는 칸을 고른다.
+ * hoursDay 를 모르면 예전처럼 0번을 쓴다 — 틀릴 수 있지만 아무것도 못 보여주는 것보다 낫다.
  */
-export function openStatus(hours: string[] | undefined, now = new Date()): OpenStatus {
+export function todayIndex(hoursDay: number | undefined, now: Date): number {
+  if (hoursDay == null) return 0;
+  return (now.getDay() - hoursDay + 7) % 7;
+}
+
+/**
+ * @param hours    카카오가 준 7일치 배열. 0번은 수집한 날이다.
+ * @param now      판정 기준 시각
+ * @param hoursDay hours[0] 의 요일(0=일). 없으면 0번을 오늘로 본다.
+ */
+export function openStatus(hours: string[] | undefined, now = new Date(), hoursDay?: number): OpenStatus {
   if (!hours?.length) return UNKNOWN;
 
+  const idx = todayIndex(hoursDay, now);
+  // 배열이 7칸보다 짧을 수 있다(카카오가 덜 주는 경우). 그러면 판정하지 않는다.
+  if (idx >= hours.length) return UNKNOWN;
+
   const nowMin = now.getHours() * 60 + now.getMinutes();
-  const today = hours[0] ?? '';
+  const today = hours[idx] ?? '';
 
   if (!today.trim()) return { state: 'dayoff', text: '오늘 휴무' };
 
@@ -39,8 +60,8 @@ export function openStatus(hours: string[] | undefined, now = new Date()): OpenS
   if (!t) return UNKNOWN;
 
   // 자정을 넘겨 여는 가게를 새벽에 보면, 지금 열려 있는 건 어젯밤에 시작한 영업이다.
-  // 배열은 오늘부터 앞으로 7일이라 어제 값이 없다. 요일마다 영업시간이 크게 다르지 않으므로
-  // 오늘의 마감 시각을 그대로 쓴다. 이게 없으면 새벽 1시에 "영업 종료" 로 보인다.
+  // 어제 칸을 따로 보지 않고 오늘의 마감 시각을 그대로 쓴다 — 요일마다 마감이 크게
+  // 다르지 않고, 이게 없으면 새벽 1시에 "영업 종료" 로 보인다.
   if (t.overnight && nowMin < t.end) {
     return { state: t.end - nowMin <= 60 ? 'closing-soon' : 'open', text: statusText(nowMin, t.end) };
   }
@@ -77,7 +98,7 @@ function parseRange(s: string): { start: number; end: number; overnight: boolean
 }
 
 /** 목록 필터용. "영업 중" 칩이 켜졌을 때 남길 것인지. */
-export function isOpenNow(hours: string[] | undefined, now = new Date()): boolean {
-  const s = openStatus(hours, now).state;
+export function isOpenNow(hours: string[] | undefined, now = new Date(), hoursDay?: number): boolean {
+  const s = openStatus(hours, now, hoursDay).state;
   return s === 'open' || s === 'closing-soon';
 }

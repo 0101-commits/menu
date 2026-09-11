@@ -43,8 +43,9 @@ interface Props {
   total: number;
 }
 
+// 목록에서 가장 자주 누르는 것들이라 44px 로 맞춘다. 나머지 컨트롤과 같은 기준이다.
 const chip = (on: boolean) =>
-  `shrink-0 min-h-9 px-3 rounded-full text-xs font-medium border transition-colors ` +
+  `shrink-0 min-h-11 px-3.5 rounded-full text-xs font-medium border transition-colors ` +
   `focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ` +
   (on
     ? 'bg-primary text-on-primary border-primary'
@@ -86,7 +87,7 @@ export function ListToolbar({
             type="button"
             onClick={onClearNear}
             aria-label={`${nearLabel} 중심 해제`}
-            className="shrink-0 inline-flex items-center gap-1 min-h-9 text-xs font-semibold text-primary-fg bg-primary-weak px-3 rounded-full hover:bg-primary-weak-pressed transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+            className="shrink-0 inline-flex items-center gap-1 min-h-11 text-xs font-semibold text-primary-fg bg-primary-weak px-3.5 rounded-full hover:bg-primary-weak-pressed transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
           >
             {nearLabel}
             <X className="w-3.5 h-3.5" aria-hidden="true" />
@@ -119,7 +120,7 @@ export function ListToolbar({
         <button
           type="button"
           onClick={onPickNow}
-          className="shrink-0 inline-flex items-center gap-1 min-h-9 px-3 rounded-full text-xs font-semibold bg-primary text-on-primary hover:bg-primary-pressed transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+          className="shrink-0 inline-flex items-center gap-1 min-h-11 px-3.5 rounded-full text-xs font-semibold bg-primary text-on-primary hover:bg-primary-pressed transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
         >
           <Sparkles className="w-3.5 h-3.5" aria-hidden="true" />
           지금 갈 만한 곳
@@ -158,7 +159,7 @@ export function ListToolbar({
           id="sort-select"
           value={sort}
           onChange={(e) => onSortChange(e.target.value as SortKey)}
-          className="shrink-0 min-h-9 text-xs rounded-full px-2.5 bg-surface text-fg-muted border border-line focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+          className="shrink-0 min-h-11 text-xs rounded-full px-2.5 bg-surface text-fg-muted border border-line focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
         >
           {canSortDistance && <option value="distance">거리순</option>}
           <option value="rating">평점순</option>

@@ -80,6 +80,7 @@ export default function App() {
   const [discover, setDiscover] = useState(Boolean(initial.discover));
   const [discovered, setDiscovered] = useState<Discovered[]>([]);
   const [discoveredRatings, setDiscoveredRatings] = useState<RatingsMap>({});
+  const [discoverFailed, setDiscoverFailed] = useState<Set<string>>(() => new Set());
 
   // ---------- 껍데기 ----------
   const { visits, toggle: toggleVisit, setNote } = useVisits();
@@ -219,9 +220,16 @@ export default function App() {
   const onDiscoveredOpen = useCallback((d: Discovered) => {
     const key = `k:${d.kakaoId}`;
     if (discoveredRatings[key] || !RATINGS_API) return;
-    fetchRatings({ k: d.kakaoId }).then((r) => {
-      setDiscoveredRatings((prev) => ({ ...prev, [key]: r }));
+    setDiscoverFailed((prev) => {
+      if (!prev.has(key)) return prev;
+      const next = new Set(prev);
+      next.delete(key);
+      return next;
     });
+    fetchRatings({ k: d.kakaoId })
+      .then((r) => setDiscoveredRatings((prev) => ({ ...prev, [key]: r })))
+      // 실패를 "평점 없음" 으로 삼키지 않는다. 창에 그렇게 적고 다시 시도를 띄운다.
+      .catch(() => setDiscoverFailed((prev) => new Set(prev).add(key)));
   }, [discoveredRatings]);
 
   // 구글 평점은 카드를 열 때만 받는다(30일 캐시 정책 + 무료 한도).
@@ -229,10 +237,13 @@ export default function App() {
     if (!GOOGLE_ENABLED || !detailPlace?.googlePlaceId) return;
     const sid = detailPlace.placeId;
     if (ratings[sid]?.google) return;
-    fetchRatings({ g: detailPlace.googlePlaceId }).then((r) => {
-      if (!r.google) return;
-      setRatings((prev) => ({ ...prev, [sid]: { ...prev[sid], google: r.google } }));
-    });
+    fetchRatings({ g: detailPlace.googlePlaceId })
+      .then((r) => {
+        if (!r.google) return;
+        setRatings((prev) => ({ ...prev, [sid]: { ...prev[sid], google: r.google } }));
+      })
+      // 구글 칸은 이미 "수집 전" 으로 보인다. 실패분은 캐시에 남지 않으니 다시 열면 재시도된다.
+      .catch(() => {});
   }, [detailPlace, ratings]);
 
   // ---------- 목록 ----------
@@ -263,7 +274,13 @@ export default function App() {
     }
 
     if (unvisitedOnly) list = list.filter((p) => !visitedIds.has(p.placeId));
-    if (openOnly) list = list.filter((p) => isOpenNow(ratings[p.placeId]?.kakao?.hours));
+    if (openOnly) {
+      const now = new Date();
+      list = list.filter((p) => {
+        const k = ratings[p.placeId]?.kakao;
+        return isOpenNow(k?.hours, now, k?.hoursDay);
+      });
+    }
     if (minScore != null) {
       list = list.filter((p) => {
         const s = summarize(ratings[p.placeId], means).combined;
@@ -411,6 +428,7 @@ export default function App() {
             discovered={discovered}
             discoveredRatings={discoveredRatings}
             onDiscoveredOpen={onDiscoveredOpen}
+            discoverFailed={discoverFailed}
             discoverUnavailable={!RATINGS_API}
             topOffset={chipBarHeight}
           />

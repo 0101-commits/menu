@@ -117,6 +117,8 @@ interface Props {
   discovered: Discovered[];
   discoveredRatings: RatingsMap;
   onDiscoveredOpen: (d: Discovered) => void;
+  /** 평점 조회에 실패한 발견 가게 키(`k:{kakaoId}`) */
+  discoverFailed: Set<string>;
   discoverUnavailable: boolean;
   topOffset: number;
   onStatusChange?: (s: 'loading' | 'ready' | 'error') => void;
@@ -125,7 +127,7 @@ interface Props {
 export function MapView({
   places, ratings, means, googleEnabled, selectedCategories, selectedPlace,
   onSelect, onDetail, onBoundsChange, focus, discovered, discoveredRatings,
-  onDiscoveredOpen, discoverUnavailable, topOffset, onStatusChange,
+  onDiscoveredOpen, discoverFailed, discoverUnavailable, topOffset, onStatusChange,
 }: Props) {
   const mapEl = useRef<HTMLDivElement>(null);
   const kakaoRef = useRef<KakaoNS>(null);
@@ -397,14 +399,16 @@ export function MapView({
       <DiscoveredWindow
         item={openDiscovered}
         ratings={discoveredRatings[key]}
-        loading={!discoverUnavailable && !discoveredRatings[key]}
+        loading={!discoverUnavailable && !discoverFailed.has(key) && !discoveredRatings[key]}
         unavailable={discoverUnavailable}
+        failed={discoverFailed.has(key)}
+        onRetry={() => cb.current.onDiscoveredOpen(openDiscovered)}
         onClose={() => setOpenDiscovered(null)}
       />,
     );
     d.overlay.setPosition(position);
     d.overlay.setMap(map);
-  }, [openDiscovered, discoveredRatings, discoverUnavailable]);
+  }, [openDiscovered, discoveredRatings, discoverUnavailable, discoverFailed]);
 
   // 언마운트 시 React root 정리. 렌더 중 unmount 경고를 피하려고 다음 틱으로 미룬다.
   useEffect(

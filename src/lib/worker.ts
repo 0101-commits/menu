@@ -32,9 +32,14 @@ export function cacheKey(q: RatingQuery): string {
   return `n:${q.n ?? ''}|k:${q.k ?? ''}|g:${q.g ?? ''}`;
 }
 
-/** 실패하면 빈 객체. 평점이 없다고 화면이 멈추면 안 된다. */
+/**
+ * 실패하면 거부한다. 빈 객체로 삼키면 "평점이 없는 가게" 와 "못 받아온 가게" 가
+ * 화면에서 똑같아 보이고, 사용자는 다시 시도할 방법도 실패했다는 사실도 모른다.
+ *
+ * 실패한 응답은 캐시에 남기지 않는다 — 일시적인 네트워크 오류를 세션 내내 붙들면 안 된다.
+ */
 export function fetchRatings(q: RatingQuery): Promise<Ratings> {
-  if (!RATINGS_API) return Promise.resolve({});
+  if (!RATINGS_API) return Promise.reject(new Error('NO_RATINGS_API'));
   const key = cacheKey(q);
   const hit = cache.get(key);
   if (hit) return hit;
@@ -45,8 +50,14 @@ export function fetchRatings(q: RatingQuery): Promise<Ratings> {
   if (q.g) url.searchParams.set('g', q.g);
 
   const p = fetch(url, { signal: AbortSignal.timeout(12000) })
-    .then((r) => (r.ok ? (r.json() as Promise<Ratings>) : {}))
-    .catch(() => ({}) as Ratings);
+    .then((r) => {
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      return r.json() as Promise<Ratings>;
+    })
+    .catch((e) => {
+      cache.delete(key); // 다음에 다시 눌러 보면 새로 받는다
+      throw e;
+    });
 
   cache.set(key, p);
   return p;
