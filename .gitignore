@@ -21,3 +21,11 @@ dist-ssr
 *.sln
 *.sw?
 .env
+
+# myplace sync
+raw/
+reports/
+.env
+
+# OMC 운영 산출물
+.omc/

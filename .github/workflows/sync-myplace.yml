@@ -1,0 +1,100 @@
+name: 즐겨찾기 동기화
+
+# 주 1회 자동 수집 + 수동 실행.
+# 변경이 있을 때만 PR 을 연다. 리포트를 PR 본문에 넣어 리뷰 없이 머지하지 않도록 한다.
+#
+# 주의: NAVER_COOKIE 는 계정 세션이다. 네이버 세션은 IP 가 바뀌면 무효화될 수 있고
+# Actions 러너는 매 실행마다 IP 가 다르다. 여기서 LOGIN_REQUIRED 로 실패하면
+# self-hosted runner 로 옮기거나 로컬 `npm run sync` 로 돌려야 한다 (docs/myplace-api.md).
+
+on:
+  schedule:
+    - cron: '0 20 * * 0' # 매주 월요일 05:00 KST
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: 즐겨찾기 수집
+        id: fetch
+        env:
+          NAVER_COOKIE: ${{ secrets.NAVER_COOKIE }}
+        run: node scripts/fetch-myplace.mjs
+
+      - name: 신규 장소 보강
+        run: node scripts/enrich.mjs --only-new
+
+      - name: places.ts 생성 + 게이트
+        run: node scripts/build-places.mjs
+
+      - name: 타입 검사
+        run: npm run typecheck
+
+      - name: 빌드
+        run: npm run build
+
+      - name: 리포트 읽기
+        id: report
+        run: |
+          FILE=$(ls -t reports/diff-*.md | head -1)
+          echo "file=$FILE" >> "$GITHUB_OUTPUT"
+          {
+            echo 'body<<PR_BODY_EOF'
+            cat "$FILE"
+            echo 'PR_BODY_EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: PR 생성
+        uses: peter-evans/create-pull-request@v6
+        with:
+          branch: sync/myplace
+          title: '즐겨찾기 동기화 ${{ github.run_number }}'
+          body: ${{ steps.report.outputs.body }}
+          commit-message: 'chore(data): 네이버 즐겨찾기 동기화'
+          add-paths: |
+            src/data/places.ts
+          delete-branch: true
+
+      # 조용히 실패하지 않게. 쿠키 만료가 가장 흔한 원인이다.
+      - name: 실패 알림 이슈
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const title = '즐겨찾기 동기화 실패';
+            const { data: open } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner, repo: context.repo.repo,
+              state: 'open', labels: 'sync-failure',
+            });
+            const url = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const body = [
+              `실행 ${context.runId} 가 실패했습니다.`, '', url, '',
+              '가장 흔한 원인은 `NAVER_COOKIE` 만료입니다.',
+              '로그인된 브라우저에서 쿠키를 다시 받아 레포 Secret 을 갱신하세요.',
+            ].join('\n');
+            if (open.length) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: open[0].number, body,
+              });
+            } else {
+              await github.rest.issues.create({
+                owner: context.repo.owner, repo: context.repo.repo,
+                title, body, labels: ['sync-failure'],
+              });
+            }
