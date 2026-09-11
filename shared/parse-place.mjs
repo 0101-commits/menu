@@ -53,7 +53,10 @@ export function parseNaver(html, sid) {
   if (anchor < 0 && score === undefined && visitors === undefined) return { parseError: true };
 
   return {
-    score: score ?? null,
+    // 0 은 실제 평점이 아니라 "점수 없음" 이다. 방문자 리뷰가 288 개인데 평균이 정확히 0 인
+    // 가게가 실측 55 건 나왔고, 0 초과 3 미만은 6 건뿐이었다. 0.0 으로 보여 주면
+    // 평점순 바닥에 깔리고 카드에는 거짓말이 찍힌다.
+    score: score ? score : null,
     visitors: visitors ?? 0,
     blogs: blogs ?? 0,
     ...(keywords.length ? { keywords: keywords.slice(0, 6) } : {}),
@@ -91,7 +94,8 @@ export function parseKakao(j) {
     .filter((m) => m.name);
 
   return {
-    score: ss.average_score ?? null,
+    // 네이버와 같은 이유로 0 은 점수 없음이다(별점 표본 0 이면 평균도 0 으로 온다).
+    score: ss.average_score ? ss.average_score : null,
     count: ss.review_count ?? 0,
     blogs: j?.blog_review?.review_count ?? 0,
     ...(sym ? { price: sym.length } : {}), // ₩₩₩₩ → 4

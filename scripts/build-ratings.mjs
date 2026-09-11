@@ -41,9 +41,12 @@ for (const [sid, v] of Object.entries(raw)) {
     else if (n.gone) { stat.naverGone++; closedList.push(`${place.name} — 네이버 페이지 없음`); entry.closed = true; }
     else if (n.parseError) stat.naverFail++;
     else {
-      if (n.score == null) stat.naverNoScore++; else stat.naverScore++;
+      // 0 은 "점수 없음" 이다(shared/parse-place.mjs 주석 참고). 이미 받아 둔 옛 수집분에도
+      // 0 이 섞여 있으므로 여기서 한 번 더 걸러 낸다.
+      const score = n.score ? n.score : null;
+      if (score == null) stat.naverNoScore++; else stat.naverScore++;
       entry.naver = {
-        score: n.score ?? null,
+        score,
         visitors: n.visitors ?? 0,
         blogs: n.blogs ?? 0,
         // 옛 형식(문자열 배열)은 업주 등록 검색 키워드라 뜻이 다르다. 새 형식만 내보낸다.

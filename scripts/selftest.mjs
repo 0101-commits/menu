@@ -222,6 +222,14 @@ it('네이버: 점수와 키워드 리뷰를 집는다', () => {
   assert.deepEqual(r.keywords[0], { t: '음식이 맛있어요', n: 987 });
 });
 
+it('네이버: 0 점은 점수 없음으로 다룬다', () => {
+  // 방문자 리뷰가 288 개인데 평균이 정확히 0 인 가게가 실측 55 건. 실제 평점이 아니라 미제공이다.
+  const html = '{"PlaceDetailBase:123":{"visitorReviewsTotal":288,"visitorReviewsScore":0,"cafeBlogReviewsTotal":267}}';
+  const r = parseNaver(html, '123');
+  assert.equal(r.score, null);
+  assert.equal(r.visitors, 288);
+});
+
 it('네이버: 다른 장소의 점수를 집지 않는다', () => {
   // 주변 추천 블록에 다른 업체 값이 같이 실린다. 앵커 밖의 값을 쓰면 안 된다.
   const html =
