@@ -1,0 +1,59 @@
+name: 배포
+
+# main 에 올라가면 GitHub Pages 로 내보낸다.
+# 데이터(public/data/*.json)는 레포에 커밋돼 있으므로 여기서 수집하지 않는다.
+# 수집은 sync-myplace.yml 이 주 1회 돌려 PR 로 올린다.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 배포가 겹치면 나중 것만 살린다. 진행 중인 것을 죽이지는 않는다.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: 타입 검사
+        run: npm run typecheck
+
+      - name: 빌드
+        run: npm run build
+        env:
+          # Worker 를 띄웠다면 레포 Variables 에 넣는다. 없으면 온디맨드 평점만 꺼진다.
+          VITE_RATINGS_API: ${{ vars.VITE_RATINGS_API }}
+          VITE_GOOGLE_RATINGS: ${{ vars.VITE_GOOGLE_RATINGS }}
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

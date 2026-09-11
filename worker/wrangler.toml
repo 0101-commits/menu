@@ -1,0 +1,30 @@
+# 온디맨드 평점 Worker.
+#
+# 배포
+#   1) KV 만들기        npx wrangler kv namespace create RATINGS
+#      출력된 id 를 아래 kv_namespaces 의 id 에 넣는다.
+#   2) 구글 키(선택)    npx wrangler secret put GOOGLE_PLACES_KEY
+#      넣지 않으면 구글 칸만 꺼지고 네이버·카카오는 그대로 된다.
+#   3) 배포             npx wrangler deploy
+#   4) 앱에 연결        레포 Settings > Secrets and variables > Actions > Variables 에
+#                       VITE_RATINGS_API = https://<배포주소>/
+#                       구글까지 쓰면 VITE_GOOGLE_RATINGS = 1
+#
+# 무료 요금제로 충분하다(하루 100,000 요청, KV 읽기 100,000/일).
+
+name = "matpin-ratings"
+main = "index.js"
+compatibility_date = "2026-09-01"
+
+[vars]
+# 이 주소에서 온 요청만 받는다. 비우면 아무 데서나 부를 수 있으니 배포 후 꼭 채운다.
+ALLOWED_ORIGINS = "https://0101-commits.github.io,http://localhost:5173"
+
+# 하루 상한. 구글만 돈이 든다 — 30 × 30일 = 900 으로 무료 한도(월 1,000) 안에 둔다.
+DAILY_GOOGLE_LIMIT = "30"
+DAILY_NAVER_LIMIT = "500"
+DAILY_KAKAO_LIMIT = "500"
+
+[[kv_namespaces]]
+binding = "RATINGS"
+id = "여기에_wrangler_kv_namespace_create_출력값을_넣는다"
