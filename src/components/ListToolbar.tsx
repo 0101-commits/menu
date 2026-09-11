@@ -25,6 +25,8 @@ interface Props {
 
   openOnly: boolean;
   onOpenOnlyChange: (v: boolean) => void;
+  /** 영업시간 데이터가 아직 없으면 이 필터는 쓸 수 없다 */
+  openOnlyAvailable: boolean;
   minScore: number | null;
   onMinScoreChange: (v: number | null) => void;
   sort: SortKey;
@@ -54,7 +56,7 @@ const chip = (on: boolean) =>
 export function ListToolbar({
   query, onQueryChange, onSubmit, scope, onScopeChange,
   nearLabel, radius, onRadiusChange, onClearNear,
-  openOnly, onOpenOnlyChange, minScore, onMinScoreChange,
+  openOnly, onOpenOnlyChange, openOnlyAvailable, minScore, onMinScoreChange,
   sort, onSortChange, canSortDistance, discover, onDiscoverChange,
   unvisitedOnly, onUnvisitedOnlyChange, onPickNow, total,
 }: Props) {
@@ -129,7 +131,15 @@ export function ListToolbar({
         <span className="shrink-0 w-px h-4 bg-line mx-0.5" aria-hidden="true" />
 
         <SlidersHorizontal className="w-3.5 h-3.5 shrink-0 text-fg-subtle" aria-hidden="true" />
-        <button type="button" onClick={() => onOpenOnlyChange(!openOnly)} className={chip(openOnly)} aria-pressed={openOnly}>
+        {/* 데이터가 없으면 눌러도 0곳이 된다. 막아 두고 이유를 붙인다. */}
+        <button
+          type="button"
+          onClick={() => onOpenOnlyChange(!openOnly)}
+          className={`${chip(openOnly)} disabled:opacity-40 disabled:cursor-not-allowed`}
+          aria-pressed={openOnly}
+          disabled={!openOnlyAvailable}
+          title={openOnlyAvailable ? undefined : '영업시간 데이터가 아직 없습니다 (카카오 매칭 필요)'}
+        >
           영업 중
         </button>
         <button

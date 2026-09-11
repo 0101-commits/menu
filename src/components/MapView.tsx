@@ -167,6 +167,9 @@ export function MapView({
     loadKakao()
       .then((kakao) => {
         if (cancelled || !mapEl.current) return;
+        // 같은 DOM 에 지도를 두 번 만들면 이전 마커 4,084개와 idle 리스너가 살아남는다.
+        // 지금 경로에서는 places 가 한 번만 바뀌지만, 바뀌어도 터지지 않게 막아 둔다.
+        if (mapRef.current) return;
         kakaoRef.current = kakao;
         imagesRef.current = buildImages(kakao);
 
@@ -250,7 +253,9 @@ export function MapView({
     // 인스턴스를 유지하고 마커만 교체한다. 파괴·재생성은 충돌한다.
     clusterer.removeMarkers(all, true);
     clusterer.addMarkers(on);
-  }, [selectedCategories]);
+    // status 를 넣어야 URL 로 들어온 초기 필터(?cat=일식)가 반영된다. 마운트 시점에는
+    // 지도가 아직 없어 그냥 돌아 나가고, selectedCategories 참조는 그 뒤 바뀌지 않는다.
+  }, [selectedCategories, status]);
 
   // ---------- 선택 ----------
   useEffect(() => {
@@ -293,8 +298,17 @@ export function MapView({
         overlay: new kakao.maps.CustomOverlay({ position, content: el, yAnchor: 1, zIndex: 20 }),
       };
     }
-    const info = infoRef.current;
-    info.root.render(
+    infoRef.current.overlay.setPosition(position);
+    infoRef.current.overlay.setMap(map);
+  }, [selectedPlace, status]);
+
+  // 오버레이 내용만 따로 그린다.
+  //
+  // 위 effect 에 ratings 를 같이 넣으면, 평점이 늦게 도착할 때마다 map.setCenter 가 다시 돌아
+  // 사용자가 끌어 둔 지도가 선택한 가게로 튕겨 돌아가고 "이 근처 N곳" 패널도 닫힌다.
+  useEffect(() => {
+    if (!selectedPlace || !infoRef.current) return;
+    infoRef.current.root.render(
       <PlaceInfoWindow
         place={selectedPlace}
         ratings={ratings[selectedPlace.placeId]}
@@ -304,8 +318,6 @@ export function MapView({
         onDetail={onDetail}
       />,
     );
-    info.overlay.setPosition(position);
-    info.overlay.setMap(map);
   }, [selectedPlace, status, ratings, means, googleEnabled, onDetail]);
 
   // ---------- 반경·이동 ----------

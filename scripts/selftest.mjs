@@ -132,6 +132,14 @@ it('소스 간 차이가 크면 경고한다', () => {
   assert.equal(split.caution, '소스마다 평가가 갈립니다');
 });
 
+it('표본 0 인 소스는 통합 점수에 끼지 않는다', () => {
+  // n=0 이면 보정식이 (0·score + 50·4.3)/50 = 4.3 을 내놓는다.
+  // 실제 2.0 짜리가 평점순 위로 올라가고 "평점 4.0+" 도 통과하게 된다.
+  const zero = summarize({ naver: { score: 2.0, visitors: 0, blogs: 0 } }, means);
+  assert.equal(zero.combined, null);
+  assert.equal(zero.sourceCount, 0);
+});
+
 it('점수가 없으면 통합도 없다', () => {
   const none = summarize({ naver: { score: null, visitors: 120, blogs: 4 } }, means);
   assert.equal(none.combined, null);

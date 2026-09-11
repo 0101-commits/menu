@@ -194,16 +194,24 @@ export default function App() {
     }
   }, [query, places]);
 
-  // 타이핑 중에는 목록만 좁힌다(지오코딩은 Enter 에서). 입력이 비면 중심도 푼다.
+  // 타이핑 중에는 목록만 좁힌다(지오코딩은 Enter 에서).
+  //
+  // 입력을 비웠을 때 중심점을 푸는 일은 여기서 하지 않는다. near 가 deps 에 있어서,
+  // "지금 갈 만한 곳"(검색어 없이 중심점만 세운다)이 220ms 뒤 스스로 취소됐다.
+  // 그건 사용자가 입력을 지운 사건이므로 입력 핸들러가 할 일이다.
   useEffect(() => {
     const t = setTimeout(() => {
       const parsed = parseQuery(query);
       // 이미 중심점으로 쓰인 말을 목록 필터로 다시 쓰지 않는다.
       setTextFilter(near && parsed.text.trim() === near.label ? '' : parsed.text);
-      if (!query.trim()) { setNear(null); setSearchNotice(null); }
     }, 220);
     return () => clearTimeout(t);
   }, [query, near]);
+
+  const handleQueryChange = useCallback((v: string) => {
+    setQuery(v);
+    if (!v.trim()) { setNear(null); setSearchNotice(null); }
+  }, []);
 
   // ---------- 발견 ----------
   useEffect(() => {
@@ -253,16 +261,17 @@ export default function App() {
     [near, selectedPlace],
   );
 
-  const filtered = useMemo(() => {
-    let list: Place[];
-    if (near) {
-      list = places.filter((p) => distanceM(near.lat, near.lng, p.lat, p.lng) <= radius);
-    } else if (scope === 'all' || !visiblePlaces) {
-      list = places;
-    } else {
-      list = visiblePlaces;
-    }
+  // 평점 기반 필터를 걸 수 있는 상태인지. 카카오 매칭 전에는 영업시간이 아예 없다.
+  const hasHours = useMemo(() => Object.values(ratings).some((r) => r.kakao?.hours?.length), [ratings]);
+  const hasScores = useMemo(
+    () => Object.values(ratings).some((r) => rawOf(r, 'naver') || rawOf(r, 'kakao') || rawOf(r, 'google')),
+    [ratings],
+  );
 
+  // 바탕 목록(지도 범위 / 전체 / 반경)만 다르고 나머지 조건은 같다.
+  // 한 함수로 두어야 "지도 밖에 N곳 더" 계산이 실제 목록과 같은 기준으로 센다.
+  const applyFilters = useCallback((input: Place[]) => {
+    let list = input;
     if (region.sido) list = list.filter((p) => p.sido === region.sido);
     if (region.sigungu) list = list.filter((p) => p.sigungu === region.sigungu);
     if (region.dong) list = list.filter((p) => p.dong === region.dong);
@@ -274,19 +283,36 @@ export default function App() {
     }
 
     if (unvisitedOnly) list = list.filter((p) => !visitedIds.has(p.placeId));
-    if (openOnly) {
+
+    // 영업시간·평점이 아직 없으면 그 조건을 걸지 않는다. 전부 "모름" 인 상태에서
+    // 규칙대로 거르면 4,084곳이 통째로 탈락해 "0곳" 만 남는다 — 필터가 아니라 고장으로 보인다.
+    if (openOnly && hasHours) {
       const now = new Date();
       list = list.filter((p) => {
         const k = ratings[p.placeId]?.kakao;
         return isOpenNow(k?.hours, now, k?.hoursDay);
       });
     }
-    if (minScore != null) {
+    if (minScore != null && hasScores) {
       list = list.filter((p) => {
         const s = summarize(ratings[p.placeId], means).combined;
         return s != null && s >= minScore;
       });
     }
+    return list;
+  }, [region, categories, textFilter, index, unvisitedOnly, visitedIds, openOnly, minScore, ratings, means, hasHours, hasScores]);
+
+  const filtered = useMemo(() => {
+    let list: Place[];
+    if (near) {
+      list = places.filter((p) => distanceM(near.lat, near.lng, p.lat, p.lng) <= radius);
+    } else if (scope === 'all' || !visiblePlaces) {
+      list = places;
+    } else {
+      list = visiblePlaces;
+    }
+
+    list = applyFilters(list);
 
     const sorted = [...list];
     if (sort === 'distance' && origin) {
@@ -301,21 +327,16 @@ export default function App() {
       sorted.sort((a, b) => n(b) - n(a));
     }
     return sorted;
-  }, [places, visiblePlaces, near, radius, scope, region, categories, textFilter, index, openOnly, minScore, ratings, means, sort, origin, unvisitedOnly, visitedIds]);
+  }, [places, visiblePlaces, near, radius, scope, applyFilters, ratings, means, sort, origin]);
 
   // 지도 범위 밖에 있는 결과 수. "지도 범위" 를 켠 채로 검색하면 화면 밖 가게가 빠지는데,
   // 그걸 말해 주지 않으면 "없는 가게" 로 오해한다.
   const outsideCount = useMemo(() => {
     if (near || scope === 'all' || !visiblePlaces || !textFilter.trim()) return 0;
-    let all = places;
-    if (region.sido) all = all.filter((p) => p.sido === region.sido);
-    if (region.sigungu) all = all.filter((p) => p.sigungu === region.sigungu);
-    if (region.dong) all = all.filter((p) => p.dong === region.dong);
-    if (categories.length) all = all.filter((p) => categories.includes(p.category));
-    const allowed = new Set(all.map((p) => p.placeId));
-    const hits = searchPlaces(index, textFilter).filter((p) => allowed.has(p.placeId));
-    return Math.max(0, hits.length - filtered.length);
-  }, [near, scope, textFilter, places, region, categories, index, filtered.length, visiblePlaces]);
+    // 같은 applyFilters 를 쓴다. 조건이 어긋나면 "지도 밖에 7곳" 이라 해놓고
+    // 전체로 바꿨을 때 4곳만 느는 식으로 숫자가 거짓말을 한다.
+    return Math.max(0, applyFilters(places).length - filtered.length);
+  }, [near, scope, textFilter, places, applyFilters, filtered.length, visiblePlaces]);
 
   // 검색어가 있으면 정렬이 이미 관련도 순이다. 거리순을 강제하지 않는다.
   const canSortDistance = Boolean(origin);
@@ -372,7 +393,8 @@ export default function App() {
       (pos) => {
         setNear({ label: '내 위치', lat: pos.coords.latitude, lng: pos.coords.longitude });
         setRadius(1000);
-        setOpenOnly(true);
+        // 영업시간 데이터가 없으면 "영업 중" 을 켜 봐야 0곳이 된다.
+        setOpenOnly(hasHours);
         setSort('rating');
         setQuery('');
         setTextFilter('');
@@ -385,7 +407,7 @@ export default function App() {
       },
       { enableHighAccuracy: true, timeout: 10000 },
     );
-  }, []);
+  }, [hasHours]);
 
   const pickRandom = () => {
     if (!filtered.length) return;
@@ -488,7 +510,7 @@ export default function App() {
           <>
             <ListToolbar
               query={query}
-              onQueryChange={setQuery}
+              onQueryChange={handleQueryChange}
               onSubmit={runSearch}
               scope={scope}
               onScopeChange={setScope}
@@ -498,6 +520,7 @@ export default function App() {
               onClearNear={() => { setNear(null); setQuery(''); setTextFilter(''); }}
               openOnly={openOnly}
               onOpenOnlyChange={setOpenOnly}
+              openOnlyAvailable={hasHours}
               minScore={minScore}
               onMinScoreChange={setMinScore}
               sort={sort}

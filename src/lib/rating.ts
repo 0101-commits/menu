@@ -28,19 +28,25 @@ export interface SourceMeans {
 
 const DEFAULT_MEANS: SourceMeans = { naver: 4.3, kakao: 3.9, google: 4.2 };
 
-/** 소스별 원 점수와 표본 수를 꺼낸다. 없으면 undefined. */
+/**
+ * 소스별 원 점수와 표본 수를 꺼낸다. 없으면 undefined.
+ *
+ * 표본이 0 이면 점수가 있어도 없는 것으로 본다. 베이지안 보정식에서 n=0 이면
+ * 보정값이 그 소스의 전체 평균(4.3)이 되어, 실제 2.0 점짜리 가게가 평점순 위로 올라오고
+ * "평점 4.0+" 필터도 통과한다. 표본 수 파싱이 어긋난 경우에도 같은 일이 난다.
+ */
 export function rawOf(r: Ratings | undefined, key: SourceKey): { score: number; n: number } | undefined {
   if (!r) return undefined;
   if (key === 'naver') {
     const v = r.naver;
-    return v && v.score != null ? { score: v.score, n: v.visitors } : undefined;
+    return v && v.score != null && v.visitors > 0 ? { score: v.score, n: v.visitors } : undefined;
   }
   if (key === 'kakao') {
     const v = r.kakao;
-    return v && v.score != null ? { score: v.score, n: v.count } : undefined;
+    return v && v.score != null && v.count > 0 ? { score: v.score, n: v.count } : undefined;
   }
   const v = r.google;
-  return v && v.score != null ? { score: v.score, n: v.count } : undefined;
+  return v && v.score != null && v.count > 0 ? { score: v.score, n: v.count } : undefined;
 }
 
 /** 데이터 전체에서 소스별 평균을 구한다. 앱 시작 때 한 번만 부른다. */

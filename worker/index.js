@@ -18,7 +18,9 @@ const DAY = 86400;
 const TTL = 30 * DAY; // 구글 정책 상한에 맞춘다. 나머지 소스도 같이 맞춰 단순하게 둔다.
 
 function corsHeaders(origin, allowed) {
-  const ok = allowed.length === 0 || allowed.includes(origin);
+  // 비어 있으면 막는다. 열어 두면 vars 설정을 빠뜨린 배포에서 아무 사이트나
+  // 이 Worker 를 통해 구글 쿼터를 태울 수 있다(키가 새는 건 아니지만 과금은 난다).
+  const ok = allowed.length > 0 && allowed.includes(origin);
   return {
     'Access-Control-Allow-Origin': ok ? (origin || '*') : 'null',
     'Access-Control-Allow-Methods': 'GET, OPTIONS',
@@ -33,17 +35,23 @@ const json = (body, status, headers) =>
     headers: { 'content-type': 'application/json; charset=utf-8', ...headers },
   });
 
-/** 하루 호출 수를 센다. 넘으면 그 소스만 건너뛴다 — 앱 전체를 죽이지 않는다. */
+/**
+ * 하루 호출 수를 센다. 넘으면 그 소스만 건너뛴다 — 앱 전체를 죽이지 않는다.
+ *
+ * ⚠ 이건 정확한 상한이 아니다. KV 는 read-modify-write 가 원자적이지 않고 읽기 일관성도
+ * 최대 60초 지연되므로, 동시에 N건이 들어오면 N건이 함께 통과할 수 있다.
+ * 먼저 올리고 나중에 검사해 낙관적 누락만 줄인다.
+ *
+ * **요금의 진짜 상한은 Google Cloud 콘솔의 API 일일 할당량(Quotas)에서 걸어야 한다.**
+ * 여기 값은 그 앞의 완충일 뿐이다. docs/keys.html 3단계 참고.
+ */
 async function overQuota(env, key, limit) {
   if (!limit) return false;
   const day = new Date().toISOString().slice(0, 10);
   const k = `quota:${key}:${day}`;
   const used = Number((await env.RATINGS.get(k)) ?? 0);
-  if (used >= limit) return true;
-  // 정확한 카운터가 아니다(동시 요청에서 몇 건 새어 나갈 수 있다). 한도의 목적은
-  // 요금 폭주를 막는 것이지 정확한 과금이 아니므로 이 정도면 충분하다.
   await env.RATINGS.put(k, String(used + 1), { expirationTtl: 2 * DAY });
-  return false;
+  return used >= limit;
 }
 
 async function collect(env, { n, k, g }) {
@@ -94,7 +102,10 @@ export default {
 
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
     if (request.method !== 'GET') return json({ error: 'method' }, 405, cors);
-    if (allowed.length && !allowed.includes(origin)) return json({ error: 'origin' }, 403, cors);
+    if (!allowed.length) {
+      return json({ error: 'ALLOWED_ORIGINS 가 설정되지 않았습니다' }, 403, cors);
+    }
+    if (!allowed.includes(origin)) return json({ error: 'origin' }, 403, cors);
 
     const url = new URL(request.url);
     const q = {
@@ -114,9 +125,15 @@ export default {
 
     const out = await collect(env, q);
 
-    // 아무것도 못 받았으면 캐시하지 않는다. 일시적 실패를 30 일 동안 붙들면 안 된다.
+    // 요청한 소스가 전부 채워졌을 때만 30 일을 준다.
+    // 구글 일일 한도가 소진된 뒤의 응답은 {naver, kakao} 뿐인데, 이걸 30 일 캐시하면
+    // 그 가게의 구글 평점이 한 달 내내 비어 있게 된다. 부분 결과는 한 시간만 둔다.
+    const wanted = [q.n && 'naver', q.k && 'kakao', q.g && env.GOOGLE_PLACES_KEY && 'google'].filter(Boolean);
+    const complete = wanted.length > 0 && wanted.every((k) => out[k]);
     if (Object.keys(out).length) {
-      ctx.waitUntil(env.RATINGS.put(cacheKey, JSON.stringify(out), { expirationTtl: TTL }));
+      ctx.waitUntil(
+        env.RATINGS.put(cacheKey, JSON.stringify(out), { expirationTtl: complete ? TTL : 3600 }),
+      );
     }
     return json(out, 200, { ...cors, 'x-cache': 'miss', 'cache-control': 'public, max-age=3600' });
   },

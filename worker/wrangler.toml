@@ -18,10 +18,12 @@ main = "index.js"
 compatibility_date = "2026-09-01"
 
 [vars]
-# 이 주소에서 온 요청만 받는다. 비우면 아무 데서나 부를 수 있으니 배포 후 꼭 채운다.
+# 이 주소에서 온 요청만 받는다. 비워 두면 전부 403 이다(열리지 않는다).
 ALLOWED_ORIGINS = "https://0101-commits.github.io,http://localhost:5173"
 
 # 하루 상한. 구글만 돈이 든다 — 30 × 30일 = 900 으로 무료 한도(월 1,000) 안에 둔다.
+# 다만 KV 카운터는 동시 요청에서 정확하지 않다. 요금의 진짜 상한은
+# Google Cloud 콘솔 > API 및 서비스 > 할당량에서 Place Details 일일 한도로 걸어야 한다.
 DAILY_GOOGLE_LIMIT = "30"
 DAILY_NAVER_LIMIT = "500"
 DAILY_KAKAO_LIMIT = "500"
