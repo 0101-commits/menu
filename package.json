@@ -11,8 +11,11 @@
     "typecheck": "tsc --noEmit -p tsconfig.app.json",
     "sync:fetch": "node scripts/fetch-myplace.mjs",
     "sync:enrich": "node scripts/enrich.mjs --only-new",
-    "sync:build": "node scripts/build-places.mjs",
-    "sync": "npm run sync:fetch && npm run sync:enrich && npm run sync:build && npm run typecheck"
+    "match": "node scripts/match.mjs",
+    "ratings": "node scripts/ratings.mjs",
+    "build:data": "node scripts/build-places.mjs --from-existing && node scripts/build-ratings.mjs",
+    "sync": "npm run sync:fetch && npm run sync:enrich && npm run match && node scripts/build-places.mjs && npm run ratings && node scripts/build-ratings.mjs && npm run test && npm run typecheck",
+    "test": "node scripts/selftest.mjs"
   },
   "dependencies": {
     "@seed-design/css": "^2.8.0",
