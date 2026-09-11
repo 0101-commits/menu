@@ -1,0 +1,103 @@
+/* 맛핀 디자인 브리지 — 색을 바꾸려면 이 파일 한 곳만 본다.
+ *
+ * 두 가지를 한다.
+ *   1) SEED 의 carrot(당근 주황) 팔레트를 맛핀 핀 레드로 덮는다.
+ *      SEED 의 브랜드 시맨틱 토큰(bg-brand-solid, fg-brand, stroke-brand-*)이
+ *      전부 이 팔레트를 가리키므로, 팔레트만 갈면 브랜드 전체가 따라온다.
+ *   2) SEED 시맨틱 토큰에 앱 이름을 붙인다. 컴포넌트는 --matpin-* 만 쓰고
+ *      tailwind.config.js 가 이걸 유틸 클래스로 노출한다.
+ *
+ * 팔레트 선택자는 SEED 원본보다 특이성을 한 단계 높여 로드 순서와 무관하게 이기도록 했다.
+ * 자세한 이유는 아래 라이트 블록 주석 참고.
+ *
+ * 핀 레드 #c8362a 를 고른 이유
+ *   - 카카오 지도 타일의 물·도로·지하철이 파랑 계열이라 기존 blue-600 은 선택 상태가 묻힌다
+ *   - SEED 기본 주황은 당근 브랜드로 읽힌다
+ *   - 카드 안의 네이버(초록)·카카오(노랑)·구글(파랑) 버튼과 겹치지 않는다
+ *   - 흰 글자 대비 5.2:1 로 본문 기준 WCAG AA 를 넘는다
+ */
+
+/* ---------- 라이트 ---------- */
+/* 선택자에 [data-seed] 를 한 겹 더 얹어 SEED 원본(0,2,0)보다 특이성을 높인다.
+ * 개발 서버는 CSS 모듈을 각각 별도 <style> 로 주입해서 로드 순서가 빌드와 달라진다.
+ * 순서에 기대면 dev 에서만 당근색으로 보이는 상황이 생긴다. */
+:root[data-seed],
+:root[data-seed][data-seed-color-mode="system"][data-seed-user-color-scheme="light"],
+:root[data-seed][data-seed-color-mode="light-only"] {
+  --seed-color-palette-carrot-100: #fdf1ef;
+  --seed-color-palette-carrot-200: #fbe2de;
+  --seed-color-palette-carrot-300: #f6c7c0;
+  --seed-color-palette-carrot-400: #eda297;
+  --seed-color-palette-carrot-500: #dd6d5f;
+  --seed-color-palette-carrot-600: #c8362a;
+  --seed-color-palette-carrot-700: #ac2a20;
+  --seed-color-palette-carrot-800: #8c2019;
+  --seed-color-palette-carrot-900: #661711;
+  --seed-color-palette-carrot-1000: #3a0d09;
+}
+
+/* ---------- 다크 ---------- */
+/* SEED 의 다크 램프는 방향이 뒤집힌다. 낮은 단계가 배경에 가깝고 높은 단계가 밝다. */
+:root[data-seed][data-seed-color-mode="system"][data-seed-user-color-scheme="dark"],
+:root[data-seed][data-seed-color-mode="dark-only"] {
+  --seed-color-palette-carrot-100: #2e1f1d;
+  --seed-color-palette-carrot-200: #452320;
+  --seed-color-palette-carrot-300: #632c26;
+  --seed-color-palette-carrot-400: #85342b;
+  --seed-color-palette-carrot-500: #a83e33;
+  --seed-color-palette-carrot-600: #d1594a;
+  --seed-color-palette-carrot-700: #ff8a72;
+  --seed-color-palette-carrot-800: #ffb3a3;
+  --seed-color-palette-carrot-900: #f0d3cc;
+  --seed-color-palette-carrot-1000: #f7efed;
+}
+
+/* ---------- 앱 시맨틱 ---------- */
+/* 컴포넌트가 쓰는 이름. SEED 토큰을 한 단계 감싸서, 나중에 SEED 를 걷어내도
+ * 컴포넌트를 안 고치게 한다. */
+:root {
+  --matpin-primary: var(--seed-color-bg-brand-solid);
+  --matpin-primary-pressed: var(--seed-color-bg-brand-solid-pressed);
+  --matpin-primary-weak: var(--seed-color-bg-brand-weak);
+  --matpin-primary-weak-pressed: var(--seed-color-bg-brand-weak-pressed);
+  --matpin-primary-fg: var(--seed-color-fg-brand);
+  --matpin-primary-stroke: var(--seed-color-stroke-brand-solid);
+  /* 브랜드 솔리드 위의 글자.
+   * 흰색으로 고정하면 안 된다 — SEED 다크 램프는 brand-solid 를 밝은 코럴(#ff8a72)로 두기 때문에
+   * 흰 글자를 얹으면 대비가 2:1 대로 무너진다. 명도 방향이 같은 inverted 전경색을 쓴다.
+   * 라이트: 어두운 빨강 위 흰 글자 / 다크: 밝은 코럴 위 검은 글자. */
+  --matpin-on-primary: var(--seed-color-fg-neutral-inverted);
+
+  --matpin-surface: var(--seed-color-bg-layer-default);
+  --matpin-surface-raised: var(--seed-color-bg-layer-floating);
+  --matpin-surface-sunken: var(--seed-color-bg-layer-basement);
+  --matpin-surface-fill: var(--seed-color-bg-layer-fill);
+  --matpin-surface-pressed: var(--seed-color-bg-layer-default-pressed);
+
+  --matpin-fg: var(--seed-color-fg-neutral);
+  --matpin-fg-muted: var(--seed-color-fg-neutral-muted);
+  --matpin-fg-subtle: var(--seed-color-fg-neutral-subtle);
+  --matpin-fg-disabled: var(--seed-color-fg-disabled);
+  --matpin-fg-placeholder: var(--seed-color-fg-placeholder);
+  --matpin-fg-inverted: var(--seed-color-fg-neutral-inverted);
+
+  --matpin-line: var(--seed-color-stroke-neutral-muted);
+  --matpin-line-subtle: var(--seed-color-stroke-neutral-subtle);
+  --matpin-line-strong: var(--seed-color-stroke-neutral-solid);
+
+  --matpin-critical: var(--seed-color-bg-critical-solid);
+  --matpin-critical-weak: var(--seed-color-bg-critical-weak);
+
+  /* 외부 서비스 식별색. 토큰화 대상이 아니라 상수다 — 네이버 초록·카카오 노랑·구글 파랑은
+   * 맛핀 테마가 바뀌어도 그대로여야 사용자가 버튼을 알아본다. 다크에서도 고정. */
+  --matpin-brand-naver: #03c75a;
+  --matpin-brand-kakao: #fee500;
+  --matpin-brand-google: #4285f4;
+}
+
+/* 지도 타일은 카카오 SDK 가 그리므로 항상 밝다.
+ * 다크 모드에서 지도 위에 뜨는 오버레이·팝업은 배경을 더 불투명하게 잡아야 글자가 읽힌다. */
+html {
+  background: var(--matpin-surface-sunken);
+  color: var(--matpin-fg);
+}

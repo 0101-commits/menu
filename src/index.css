@@ -1,3 +1,20 @@
+/* SEED 기본 토큰·리셋이 먼저, 그 위에 맛핀 브리지.
+ * 순서가 뒤집히면 브랜드 색이 조용히 당근 주황으로 돌아간다. */
+@import '@seed-design/css/base.css';
+@import './styles/bridge.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer utilities {
+  /* 칩 바가 쓰던 클래스인데 Tailwind 기본에도 플러그인에도 없어서 그동안 아무 효과가 없었다.
+     가로 스크롤은 남기고 막대만 숨긴다. */
+  .scrollbar-hide {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+}

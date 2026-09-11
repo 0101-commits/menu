@@ -1,12 +1,27 @@
 <!doctype html>
-<html lang="en">
+<html lang="ko" data-seed data-seed-color-mode="system">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>React Food Rating Map Prototype</title>
-    
-<script type="text/javascript" src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=489abbeb60a4ef5ff58d960dcaeecb4e&libraries=clusterer,services"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="description" content="네이버 즐겨찾기에 저장한 맛집을 지도에서 찾아봅니다." />
+    <title>맛핀</title>
+
+    <script>
+      // SEED 는 system 모드에서 data-seed-user-color-scheme 을 읽는다. 첫 페인트 전에 정해야
+      // 화면이 번쩍이지 않는다. 사용자가 고른 값이 있으면 그게 우선.
+      (function () {
+        try {
+          var saved = localStorage.getItem('matpin-color-scheme');
+          var scheme = saved || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+          document.documentElement.setAttribute('data-seed-user-color-scheme', scheme);
+        } catch (e) {
+          document.documentElement.setAttribute('data-seed-user-color-scheme', 'light');
+        }
+      })();
+    </script>
+
+    <script type="text/javascript" src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=489abbeb60a4ef5ff58d960dcaeecb4e&libraries=clusterer,services"></script>
   </head>
   <body>
     <div id="root"></div>

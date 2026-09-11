@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import { Loader2, LocateFixed, X } from 'lucide-react';
 import { PlaceInfoWindow } from './PlaceInfoWindow';
 import { Place } from '../data/places';
 
@@ -19,9 +20,12 @@ interface MapViewProps {
 
 interface KakaoPopup { name: string; address: string; url: string; }
 
+// 지도 위에 뜨는 패널의 공통 외형. 타일이 항상 밝으므로 배경은 불투명하게 둔다.
+const PANEL = 'bg-surface-raised text-fg rounded-xl shadow-xl border border-line';
+
 export function MapView({
   places, selectedPlace, selectedCategories,
-  onMarkerClick, onBoundsChange, centerOn, categoryBarHeight = 40
+  onMarkerClick, onBoundsChange, centerOn, categoryBarHeight = 48
 }: MapViewProps) {
   const mapRef = useRef<HTMLDivElement>(null);
   const kakaoMapRef = useRef<any>(null);
@@ -30,7 +34,7 @@ export function MapView({
   const clustererRef = useRef<any>(null);
   const searchTimerRef = useRef<any>(null);
   const selectedPlaceRef = useRef<Place | null>(null);
-  // 마커 클릭 시 지도 클릭 무시용 — 동기적으로 작동
+  // 마커 클릭 시 지도 click 이벤트 억제용 — 동기적으로 작동
   const suppressMapClickRef = useRef(false);
 
   const [status, setStatus] = useState('로딩중');
@@ -39,6 +43,8 @@ export function MapView({
   const [searching, setSearching] = useState(false);
   const [nearbyList, setNearbyList] = useState<Place[]>([]);
   const [nearbyOpen, setNearbyOpen] = useState(false);
+  // alert() 는 브라우저를 멈춰 세우고 어디서 권한을 켜는지도 알려주지 않는다. 인라인으로 바꾼다.
+  const [notice, setNotice] = useState<string | null>(null);
 
   useEffect(() => { selectedPlaceRef.current = selectedPlace; }, [selectedPlace]);
 
@@ -67,7 +73,6 @@ export function MapView({
     kakaoMapRef.current.setCenter(new window.kakao.maps.LatLng(centerOn.lat, centerOn.lng));
     kakaoMapRef.current.setLevel(centerOn.level);
   }, [centerOn]);
-
 
   const getDistanceM = (lat1: number, lng1: number, lat2: number, lng2: number) => {
     const R = 6371000;
@@ -134,7 +139,6 @@ export function MapView({
       window.kakao.maps.event.addListener(marker, 'click', () => {
         // ★ 마커 클릭: 지도 click 이벤트 억제 플래그 설정
         suppressMapClickRef.current = true;
-        // 모든 팝업 닫기
         if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
         setPopup(null); setSearching(false); setNearbyOpen(false);
         onMarkerClick(place);
@@ -150,7 +154,6 @@ export function MapView({
     });
 
     window.kakao.maps.event.addListener(map, 'click', (mouseEvent: any) => {
-      // 마커 클릭 억제 플래그 → 이번 이벤트 무시
       if (suppressMapClickRef.current) {
         suppressMapClickRef.current = false;
         return;
@@ -190,8 +193,12 @@ export function MapView({
   };
 
   const moveToCurrentLocation = () => {
-    if (!navigator.geolocation) { alert('위치 서비스를 지원하지 않습니다.'); return; }
+    if (!navigator.geolocation) {
+      setNotice('이 브라우저는 위치 기능을 지원하지 않습니다.');
+      return;
+    }
     setLocating(true);
+    setNotice(null);
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         const position = new window.kakao.maps.LatLng(pos.coords.latitude, pos.coords.longitude);
@@ -200,7 +207,10 @@ export function MapView({
         kakaoMapRef.current.setLevel(4);
         setLocating(false);
       },
-      () => { alert('위치 권한을 허용해주세요.'); setLocating(false); },
+      () => {
+        setNotice('위치를 못 가져왔습니다. 주소창 왼쪽 자물쇠 아이콘 > 위치 > 허용으로 바꾼 뒤 다시 눌러주세요.');
+        setLocating(false);
+      },
       { enableHighAccuracy: true, timeout: 10000 }
     );
   };
@@ -237,55 +247,83 @@ export function MapView({
         <div ref={mapRef} className="w-full h-full" />
       </div>
 
+      {notice && (
+        <div className={`absolute bottom-32 left-1/2 -translate-x-1/2 z-30 ${PANEL} px-4 py-3 max-w-[320px] flex items-start gap-2`} role="status">
+          <p className="text-sm text-fg-muted flex-1">{notice}</p>
+          <button
+            type="button"
+            onClick={() => setNotice(null)}
+            aria-label="안내 닫기"
+            className="grid place-items-center w-8 h-8 -mr-1 -mt-1 shrink-0 rounded-lg text-fg-subtle hover:text-fg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       {nearbyOpen && nearbyList.length > 0 && (
-        <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-30 bg-white rounded-xl shadow-xl border border-gray-200 w-72">
-          <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100">
-            <span className="font-semibold text-sm text-gray-800">이 근처 등록 가게 ({nearbyList.length})</span>
-            <button onClick={() => setNearbyOpen(false)} className="text-gray-400 hover:text-gray-600">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
+        <div className={`absolute bottom-20 left-1/2 -translate-x-1/2 z-30 ${PANEL} w-72 overflow-hidden`}>
+          <div className="flex items-center justify-between px-4 py-2 border-b border-line-subtle">
+            <span className="font-semibold text-sm text-fg">이 근처 {nearbyList.length}곳</span>
+            <button
+              type="button"
+              onClick={() => setNearbyOpen(false)}
+              aria-label="닫기"
+              className="grid place-items-center w-11 h-11 -mr-3 shrink-0 rounded-lg text-fg-subtle hover:text-fg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+            >
+              <X className="w-4 h-4" />
             </button>
           </div>
-          <div className="max-h-56 overflow-y-auto">
+          <ul className="max-h-56 overflow-y-auto m-0 p-0 list-none">
             {nearbyList.map((place) => (
-              <button key={place.id}
-                onClick={() => { onMarkerClick(place); setNearbyOpen(false); }}
-                className="w-full text-left px-4 py-3 hover:bg-blue-50 border-b border-gray-50 last:border-0 transition-colors">
-                <div className="font-semibold text-sm text-gray-900">{place.name}</div>
-                <div className="text-xs text-gray-500 mt-0.5 flex items-center gap-2">
-                  <span className="bg-gray-100 px-1.5 py-0.5 rounded text-gray-600 shrink-0">{place.category}</span>
-                  <span className="truncate">{place.address}</span>
-                </div>
-              </button>
+              <li key={place.id}>
+                <button
+                  type="button"
+                  onClick={() => { onMarkerClick(place); setNearbyOpen(false); }}
+                  className="w-full text-left px-4 py-3 min-h-11 hover:bg-surface-pressed border-b border-line-subtle last:border-0 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-primary"
+                >
+                  <span className="block font-semibold text-sm text-fg">{place.name}</span>
+                  <span className="mt-0.5 flex items-center gap-2 text-xs text-fg-muted">
+                    <span className="bg-surface-fill px-1.5 py-0.5 rounded shrink-0">{place.category}</span>
+                    <span className="truncate">{place.address}</span>
+                  </span>
+                </button>
+              </li>
             ))}
-          </div>
+          </ul>
         </div>
       )}
 
       {(popup || searching) && (
-        <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-20 bg-white rounded-xl shadow-xl border border-gray-200 p-4 min-w-[260px] max-w-[320px]">
+        <div className={`absolute bottom-20 left-1/2 -translate-x-1/2 z-20 ${PANEL} p-4 min-w-[260px] max-w-[320px]`}>
           {searching ? (
-            <div className="flex items-center gap-2 text-gray-500 text-sm py-1">
-              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500 shrink-0"></div>
-              주변 가게 검색 중...
+            <div className="flex items-center gap-2 text-fg-muted text-sm py-1">
+              <Loader2 className="w-4 h-4 shrink-0 animate-spin text-primary-fg" aria-hidden="true" />
+              주변 가게를 찾는 중
             </div>
           ) : popup ? (
             <>
-              <div className="flex justify-between items-start mb-2">
-                <h3 className="font-bold text-gray-900 text-base leading-tight">{popup.name}</h3>
-                <button onClick={() => setPopup(null)} className="text-gray-400 hover:text-gray-600 ml-2 shrink-0">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
+              <div className="flex justify-between items-start gap-2 mb-2">
+                <h3 className="font-bold text-fg text-base leading-tight">{popup.name}</h3>
+                <button
+                  type="button"
+                  onClick={() => setPopup(null)}
+                  aria-label="닫기"
+                  className="grid place-items-center w-11 h-11 -mr-2 -mt-2 shrink-0 rounded-lg text-fg-subtle hover:text-fg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                >
+                  <X className="w-4 h-4" />
                 </button>
               </div>
-              <p className="text-xs text-gray-500 mb-3">{popup.address}</p>
-              <a href={popup.url} target="_blank" rel="noopener noreferrer"
-                className="flex items-center justify-center gap-2 bg-yellow-400 hover:bg-yellow-500 text-gray-900 font-semibold text-sm px-4 py-2.5 rounded-lg transition-colors w-full">
-                <div className="w-5 h-5 bg-gray-900 rounded-full flex items-center justify-center shrink-0">
-                  <span className="text-yellow-400 font-bold text-xs">K</span>
-                </div>
+              <p className="text-sm text-fg-muted mb-3">{popup.address}</p>
+              <a
+                href={popup.url} target="_blank" rel="noopener noreferrer"
+                className="flex items-center justify-center gap-2 min-h-11 px-4 rounded-lg w-full font-semibold text-sm bg-surface-fill hover:bg-surface-pressed text-fg transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+              >
+                <span
+                  aria-hidden="true"
+                  className="grid place-items-center w-5 h-5 rounded-full shrink-0 text-xs font-bold"
+                  style={{ background: 'var(--matpin-brand-kakao)', color: '#111' }}
+                >K</span>
                 카카오맵에서 보기
               </a>
             </>
@@ -294,35 +332,34 @@ export function MapView({
       )}
 
       {status === '완료' && (
-        <button onClick={moveToCurrentLocation} disabled={locating}
-          className="absolute bottom-16 right-4 z-10 bg-white rounded-full shadow-lg p-3 hover:bg-gray-50 transition-colors border border-gray-200 disabled:opacity-50">
-          {locating ? (
-            <svg className="w-5 h-5 text-blue-500 animate-spin" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
-            </svg>
-          ) : (
-            <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-            </svg>
-          )}
+        <button
+          type="button"
+          onClick={moveToCurrentLocation}
+          disabled={locating}
+          aria-label="현재 위치로 이동"
+          className="absolute bottom-16 right-4 z-10 grid place-items-center w-12 h-12 bg-surface-raised rounded-full shadow-lg hover:bg-surface-pressed transition-colors border border-line disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+        >
+          {locating
+            ? <Loader2 className="w-5 h-5 text-primary-fg animate-spin" />
+            : <LocateFixed className="w-5 h-5 text-primary-fg" />}
         </button>
       )}
 
       {status === '로딩중' && (
-        <div className="absolute inset-0 flex items-center justify-center bg-gray-100 z-50">
+        <div className="absolute inset-0 grid place-items-center bg-surface-sunken z-50">
           <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-            <p className="text-gray-600">지도를 불러오는 중...</p>
+            <Loader2 className="w-10 h-10 mx-auto mb-4 text-primary-fg animate-spin" aria-hidden="true" />
+            <p className="text-fg-muted">지도를 불러오는 중</p>
           </div>
         </div>
       )}
       {status === '에러' && (
-        <div className="absolute inset-0 flex items-center justify-center bg-gray-100 z-50">
-          <div className="text-center text-red-600 p-6 bg-red-50 rounded-xl shadow-sm border border-red-200">
-            <p className="font-bold text-xl mb-2">🚫 외부 스크립트 차단됨</p>
-            <p className="text-sm text-gray-700">외부 서버로 배포하면 정상 작동합니다.</p>
+        <div className="absolute inset-0 grid place-items-center bg-surface-sunken z-50 p-6">
+          <div className={`text-center ${PANEL} p-6 max-w-sm`}>
+            <p className="font-bold text-lg mb-2 text-fg">지도를 불러오지 못했습니다</p>
+            <p className="text-sm text-fg-muted">
+              네트워크 연결을 확인한 뒤 새로고침해 주세요. 목록과 검색은 그대로 쓸 수 있습니다.
+            </p>
           </div>
         </div>
       )}
