@@ -38,11 +38,6 @@ export default function App() {
     }
   }, []);
 
-  // 지도 빈 곳 클릭 → 오버레이 닫기만
-  const handleMapAreaClick = useCallback(() => {
-    setSelectedPlace(null);
-  }, []);
-
   const handleRegionChange = useCallback((filtered: Place[], lat: number | null, lng: number | null) => {
     if (lat !== null && lng !== null) {
       setCenterOn({ lat, lng, level: 7 });
@@ -85,7 +80,6 @@ export default function App() {
           selectedPlace={selectedPlace}
           selectedCategories={selectedCategories}
           onMarkerClick={handlePlaceClick}
-          onMapAreaClick={handleMapAreaClick}
           onBoundsChange={(vp) => { if (!regionFilteredPlaces) setVisiblePlaces(vp); }}
           centerOn={centerOn}
           categoryBarHeight={40}

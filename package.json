@@ -1,5 +1,5 @@
 {
-  "name": "vite-react-typescript-starter",
+  "name": "matpin",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -8,7 +8,11 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit -p tsconfig.app.json"
+    "typecheck": "tsc --noEmit -p tsconfig.app.json",
+    "sync:fetch": "node scripts/fetch-myplace.mjs",
+    "sync:enrich": "node scripts/enrich.mjs --only-new",
+    "sync:build": "node scripts/build-places.mjs",
+    "sync": "npm run sync:fetch && npm run sync:enrich && npm run sync:build && npm run typecheck"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.57.4",
