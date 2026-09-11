@@ -32,16 +32,22 @@ export default defineConfig({
         ],
       },
       workbox: {
-        // 목록·평점 데이터까지 미리 받아 둔다. 오프라인에서 지도 타일은 못 받지만
-        // 목록·검색·평점은 그대로 열린다.
-        globPatterns: ['**/*.{js,css,html,svg,json}'],
-        // places.json 이 1.4MB 다. 기본 상한(2MB)에 걸리지 않게 넉넉히 둔다.
-        maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
+        // 앱 껍데기만 미리 받는다. 데이터(places 1.4MB + ratings 1.3MB)를 precache 에 넣으면
+        // 첫 방문에 서비스워커와 앱이 같은 파일을 각각 받아 2.7MB 를 두 번 내려받는다.
+        globPatterns: ['**/*.{js,css,html,svg}'],
         navigateFallback: `${base}index.html`,
-        // 카카오 지도 SDK·타일은 캐시하지 않는다. 오프라인에서 쓸 수 없고,
-        // 오래된 SDK 를 붙들면 지도가 조용히 깨진다.
-        navigateFallbackDenylist: [/^\/api/],
-        runtimeCaching: [],
+        runtimeCaching: [
+          {
+            // 앱이 실제로 받을 때 캐시에 들어간다. 그 다음부터는 캐시를 먼저 주고
+            // 뒤에서 갱신한다 — 오프라인에서 목록·검색·평점이 그대로 열린다.
+            urlPattern: ({ url }) => url.pathname.endsWith('.json') && url.pathname.includes('/data/'),
+            handler: 'StaleWhileRevalidate',
+            options: {
+              cacheName: 'matpin-data',
+              expiration: { maxEntries: 4, maxAgeSeconds: 30 * 24 * 60 * 60 },
+            },
+          },
+        ],
       },
     }),
   ],
