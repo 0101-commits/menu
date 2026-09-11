@@ -15,7 +15,8 @@
     "sync": "npm run sync:fetch && npm run sync:enrich && npm run sync:build && npm run typecheck"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.57.4",
+    "@seed-design/css": "^2.8.0",
+    "@seed-design/react": "^2.4.1",
     "lucide-react": "^0.344.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"

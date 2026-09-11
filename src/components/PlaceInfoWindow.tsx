@@ -1,25 +1,6 @@
+import { X } from 'lucide-react';
 import { Place } from '../data/places';
-
-async function openKakaoPlace(place: Place) {
-  try {
-    const res = await fetch(
-      `https://dapi.kakao.com/v2/local/search/keyword.json?query=${encodeURIComponent(place.name)}&x=${place.lng}&y=${place.lat}&radius=300&size=1`,
-      { headers: { Authorization: `KakaoAK ${import.meta.env.VITE_KAKAO_REST_API_KEY}` } }
-    );
-    const data = await res.json();
-    if (data.documents?.length > 0) {
-      window.open(`https://place.map.kakao.com/${data.documents[0].id}`, '_blank');
-    } else {
-      window.open(`https://map.kakao.com/?q=${encodeURIComponent(place.name)}`, '_blank');
-    }
-  } catch {
-    window.open(`https://map.kakao.com/?q=${encodeURIComponent(place.name)}`, '_blank');
-  }
-}
-
-function getGoogleUrl(place: Place) {
-  return `https://www.google.com/maps/search/${encodeURIComponent(place.name)}/@${place.lat},${place.lng},17z`;
-}
+import { PlaceLinks } from './PlaceLinks';
 
 interface PlaceInfoWindowProps {
   place: Place;
@@ -28,61 +9,31 @@ interface PlaceInfoWindowProps {
 
 export function PlaceInfoWindow({ place, onClose }: PlaceInfoWindowProps) {
   return (
-    <div className="bg-white rounded-lg shadow-xl p-4 min-w-[280px] max-w-[320px]">
-      <div className="flex justify-between items-start mb-3">
-        <div>
-          <h3 className="font-bold text-lg text-gray-900">{place.name}</h3>
-          <span className="inline-block mt-1 px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded-full">
-            {place.category}
-          </span>
+    // 지도 타일은 카카오 SDK 가 그려서 다크 모드에서도 밝다.
+    // 오버레이 배경은 불투명한 surface 로 고정해야 글자가 읽힌다.
+    <div className="bg-surface-raised text-fg rounded-xl shadow-xl border border-line p-4 min-w-[280px] max-w-[320px]">
+      <div className="flex justify-between items-start gap-2 mb-3">
+        <div className="min-w-0">
+          <h3 className="font-bold text-lg text-fg">{place.name}</h3>
+          <div className="flex items-center gap-1.5 mt-1">
+            <span className="inline-block px-2 py-0.5 text-xs bg-primary-weak text-primary-fg rounded-full font-medium">
+              {place.category}
+            </span>
+            {place.mcidName && <span className="text-xs text-fg-subtle">{place.mcidName}</span>}
+          </div>
         </div>
-        <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors">
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
-      </div>
-      <div className="mb-3">
-        <p className="text-sm text-gray-600">{place.address}</p>
-      </div>
-      <div className="flex gap-2 pt-3 border-t border-gray-200">
-        {/* 네이버 */}
-        <a
-          href={place.naverUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          title="네이버 지도로 보기"
-          className="flex items-center justify-center gap-1.5 bg-green-50 hover:bg-green-100 transition-colors px-3 py-2 rounded-lg flex-1"
-        >
-          <div className="w-6 h-6 bg-green-500 rounded-full flex items-center justify-center">
-            <span className="text-white font-bold text-sm">N</span>
-          </div>
-          <span className="text-sm font-semibold text-gray-700">네이버</span>
-        </a>
-        {/* 카카오 */}
         <button
-          onClick={() => openKakaoPlace(place)}
-          title="카카오맵으로 보기"
-          className="flex items-center justify-center gap-1.5 bg-yellow-50 hover:bg-yellow-100 transition-colors px-3 py-2 rounded-lg flex-1"
+          type="button"
+          onClick={onClose}
+          aria-label="닫기"
+          className="grid place-items-center w-11 h-11 -mr-2 -mt-2 shrink-0 rounded-lg text-fg-subtle hover:text-fg hover:bg-surface-pressed transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
         >
-          <div className="w-6 h-6 bg-yellow-400 rounded-full flex items-center justify-center">
-            <span className="text-gray-900 font-bold text-sm">K</span>
-          </div>
-          <span className="text-sm font-semibold text-gray-700">카카오</span>
+          <X className="w-5 h-5" />
         </button>
-        {/* 구글 */}
-        <a
-          href={getGoogleUrl(place)}
-          target="_blank"
-          rel="noopener noreferrer"
-          title="구글 지도로 보기"
-          className="flex items-center justify-center gap-1.5 bg-blue-50 hover:bg-blue-100 transition-colors px-3 py-2 rounded-lg flex-1"
-        >
-          <div className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center">
-            <span className="text-white font-bold text-sm">G</span>
-          </div>
-          <span className="text-sm font-semibold text-gray-700">구글</span>
-        </a>
+      </div>
+      <p className="text-sm text-fg-muted mb-3">{place.address}</p>
+      <div className="pt-3 border-t border-line-subtle">
+        <PlaceLinks place={place} />
       </div>
     </div>
   );
