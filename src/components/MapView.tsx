@@ -542,6 +542,13 @@ export function MapView({
               콘솔에 등록돼 있는지 확인해 주세요. 네트워크 문제일 수도 있습니다.
             </p>
             <p className="text-sm text-fg-muted m-0 mt-2">목록과 검색은 그대로 쓸 수 있습니다.</p>
+            {/* 여기서 막히면 십중팔구 도메인 등록이다. 확인·등록 절차를 한 곳으로 보낸다. */}
+            <a
+              href={`${import.meta.env.BASE_URL}setup.html`}
+              className="mt-4 inline-flex items-center justify-center min-h-11 px-4 rounded-lg bg-primary text-on-primary font-semibold text-sm hover:bg-primary-pressed transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+            >
+              지도 켜는 법 보기
+            </a>
           </div>
         </div>
       )}
