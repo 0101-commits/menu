@@ -62,6 +62,7 @@ for (const [sid, v] of Object.entries(raw)) {
         ...(n.keywords?.length && typeof n.keywords[0] === 'object'
           ? { keywords: n.keywords.slice(0, 6) }
           : {}),
+        ...(n.scoreHidden ? { scoreHidden: true } : {}),
         ...(n.booking ? { booking: n.booking } : {}),
       };
     }

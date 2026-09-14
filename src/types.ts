@@ -32,6 +32,11 @@ export interface NaverRating {
   blogs: number;
   /** 키워드 리뷰. t = 문항("음식이 맛있어요"), n = 고른 사람 수. 많은 순. */
   keywords?: { t: string; n: number }[];
+  /**
+   * 네이버가 이 가게의 점수를 자기 화면에 표시하지 않는 상태(showVisitorReviewScore=false).
+   * 값 자체는 현재값이고 계속 갱신되지만, 플랫폼이 공개하지 않기로 한 것이다.
+   */
+  scoreHidden?: boolean;
   booking?: string;
 }
 

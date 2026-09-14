@@ -133,6 +133,11 @@ export function PlaceSheet({
           {sum.caution && (
             <p className="m-0 mt-2 text-[11px] text-[var(--matpin-closing)]">{sum.caution}</p>
           )}
+          {/* 네이버는 점수를 내려주면서도 자기 화면에는 안 띄우는 가게가 있다(업주 설정).
+              값은 현재값이고 계속 갱신되지만, 네이버에서 찾아봐도 안 보이니 그렇다고 적어 둔다. */}
+          {n?.scoreHidden && n.score != null && (
+            <p className="m-0 mt-2 text-[11px] text-fg-subtle">네이버 점수는 네이버 화면에 공개되지 않는 가게입니다</p>
+          )}
           {googleEnabled && ratings?.google && (
             <p className="m-0 mt-2 text-[10px] text-fg-subtle">구글 평점 제공: Google</p>
           )}

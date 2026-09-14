@@ -78,9 +78,9 @@ function coarseOk(place, doc) {
 }
 
 // ---------- 카카오 ----------
-async function kakaoSearch(place) {
+async function kakaoQuery(query, place) {
   const url = new URL('https://dapi.kakao.com/v2/local/search/keyword.json');
-  url.searchParams.set('query', place.name);
+  url.searchParams.set('query', query);
   url.searchParams.set('x', String(place.lng));
   url.searchParams.set('y', String(place.lat));
   url.searchParams.set('radius', '1000');
@@ -95,6 +95,30 @@ async function kakaoSearch(place) {
   if (res.status === 429) throw new Error('RATE_LIMIT');
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return (await res.json()).documents ?? [];
+}
+
+/** 지점 표기를 뗀 이름. "연서네떡갈비 2호점" → "연서네떡갈비" */
+function baseName(name) {
+  return String(name ?? '').replace(/\s*(본점|직영점|\d+호점|[가-힣A-Za-z]{1,10}점)$/, '').trim();
+}
+
+/**
+ * 이름 그대로 찾고, 후보가 없으면 지점 표기를 떼고 다시 찾는다.
+ *
+ * 미매칭의 주된 원인이 이것이었다. 우리 데이터는 "연서네떡갈비 2호점" 인데
+ * 카카오에는 "연서네떡갈비" 로만 있어서, 원문 질의가 0건을 내고 비교할 후보 자체가 없었다.
+ * 이름 판정은 어차피 정규화해서 하므로 후보만 데려오면 된다.
+ */
+async function kakaoSearch(place) {
+  const docs = await kakaoQuery(place.name, place);
+  if (docs.length) return docs;
+
+  const base = baseName(place.name);
+  if (base && base !== place.name) {
+    await sleep(DELAY);
+    return kakaoQuery(base, place);
+  }
+  return docs;
 }
 
 function pickKakao(place, docs) {

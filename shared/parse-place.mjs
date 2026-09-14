@@ -49,6 +49,12 @@ export function parseNaver(html, sid) {
 
   const booking = (html.match(/"naverBookingUrl":"(https:[^"]+)"/) ?? [])[1];
 
+  // 네이버는 점수를 내려주면서도 "이건 노출하지 말라" 는 플래그를 같이 준다(ReviewSettings).
+  // 실측 표본 18곳 중 12곳이 false 였다. 값 자체는 현재값이고 계속 갱신된다 —
+  // 그래서 버리지 않고, 어떤 상태인지 기록해 화면에서 판단할 수 있게 한다.
+  const showFlag = html.match(/"showVisitorReviewScore":(true|false)/);
+  const scoreHidden = showFlag ? showFlag[1] === 'false' : undefined;
+
   // 앵커도 못 찾고 점수 필드도 없으면 파싱이 어긋난 것이다. 0 점으로 저장하면 안 된다.
   if (anchor < 0 && score === undefined && visitors === undefined) return { parseError: true };
 
@@ -59,6 +65,7 @@ export function parseNaver(html, sid) {
     score: score ? score : null,
     visitors: visitors ?? 0,
     blogs: blogs ?? 0,
+    ...(scoreHidden ? { scoreHidden: true } : {}),
     ...(keywords.length ? { keywords: keywords.slice(0, 6) } : {}),
     ...(booking ? { booking } : {}),
   };
