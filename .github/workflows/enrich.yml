@@ -1,0 +1,95 @@
+name: 데이터 보강 (카카오)
+
+# 카카오 장소 ID 를 붙이고 카카오 평점·영업시간·메뉴·가격을 채운다.
+#
+# 주간 동기화(sync-myplace.yml)와 나뉘어 있는 이유:
+#   저건 네이버 즐겨찾기 수집부터 시작한다. 그 단계는 계정 쿠키가 필요하고
+#   Actions 러너 IP 에서 자주 막힌다(docs/myplace-api.md). 여기서 쓰는 건
+#   KAKAO_REST_KEY 하나뿐이라 쿠키와 무관하게 언제든 돌릴 수 있다.
+#
+# 손으로 실행한다. Actions 탭 > 데이터 보강 (카카오) > Run workflow.
+# 4,084곳 기준 매칭 ~10분 + 평점 ~50분. 끝나면 main 에 데이터만 커밋하고,
+# 그 커밋이 배포 워크플로를 깨운다.
+
+on:
+  workflow_dispatch:
+    inputs:
+      delay:
+        description: '카카오 평점 요청 간격(ms). 막히면 올린다'
+        required: false
+        default: '700'
+      limit:
+        description: '몇 곳만 시험해 볼 때 (비우면 전량)'
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+
+# 두 번 겹쳐 돌면 서로의 raw/ 를 덮어쓴다.
+concurrency:
+  group: enrich
+  cancel-in-progress: false
+
+jobs:
+  enrich:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      # 카카오 장소 ID 매칭. 구글 키는 없으면 그 소스만 건너뛴다.
+      - name: 장소 ID 매칭
+        env:
+          KAKAO_REST_KEY: ${{ secrets.KAKAO_REST_KEY }}
+          GOOGLE_PLACES_KEY: ${{ secrets.GOOGLE_PLACES_KEY }}
+        run: node scripts/match.mjs ${{ inputs.limit && format('--limit={0}', inputs.limit) || '' }}
+
+      # 매칭 결과를 places.json 에 반영한다(kakaoId 필드).
+      - name: places.json 갱신 + 게이트
+        run: node scripts/build-places.mjs --from-existing
+
+      # raw/ 는 커밋되지 않으므로 지난 결과를 되살린 뒤 카카오 몫만 받는다.
+      - name: 카카오 평점 수집
+        run: |
+          node scripts/restore-ratings.mjs
+          node scripts/ratings.mjs --source=kakao --delay=${{ inputs.delay }} ${{ inputs.limit && format('--limit={0}', inputs.limit) || '' }}
+
+      - name: ratings.json 갱신 + 게이트
+        run: node scripts/build-ratings.mjs
+
+      - name: 규칙 검사
+        run: npm run test
+
+      - name: 타입 검사
+        run: npm run typecheck
+
+      - name: 빌드
+        run: npm run build
+
+      - name: 리포트 요약
+        run: |
+          echo '## 데이터 보강 결과' >> "$GITHUB_STEP_SUMMARY"
+          for f in reports/match-*.md reports/ratings-*.md; do
+            [ -f "$f" ] && { echo "### $f" >> "$GITHUB_STEP_SUMMARY"; head -30 "$f" >> "$GITHUB_STEP_SUMMARY"; }
+          done
+
+      # 데이터만 커밋한다. 이 커밋이 배포 워크플로를 깨운다.
+      - name: 커밋
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          git add public/data/places.json public/data/ratings.json
+          if git diff --cached --quiet; then
+            echo '바뀐 데이터가 없습니다.' >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          git commit -m 'data: 카카오 매칭·평점 보강 (자동)'
+          git push
