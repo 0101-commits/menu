@@ -11,11 +11,27 @@
 import assert from 'node:assert/strict';
 import { parseRegion } from './lib/region.mjs';
 import { parseNaver, parseKakao } from '../shared/parse-place.mjs';
-import { openStatus, isOpenNow, todayIndex } from '../src/lib/hours.ts';
-import { summarize, computeMeans, formatCount, formatPrice } from '../src/lib/rating.ts';
-import { parseQuery, toChoseong, isChoseongQuery, buildIndex, searchPlaces } from '../src/lib/search.ts';
-import { readUrl, toSearch } from '../src/lib/url-state.ts';
-import { groupOf, colorOf } from '../src/lib/categories.ts';
+
+// src/lib 의 .ts 를 그대로 읽는다. Node 22.18+ 부터 타입을 벗겨 실행한다.
+// 그보다 낮으면 ERR_UNKNOWN_FILE_EXTENSION 만 뜨고 원인이 안 보인다.
+//
+// import 선언은 끌어올려지므로 정적 import 로 두면 이 검사보다 먼저 실행된다.
+// 그래서 .ts 만 동적으로 불러온다.
+const [major, minor] = process.versions.node.split('.').map(Number);
+if (major < 22 || (major === 22 && minor < 18)) {
+  console.error(
+    `Node ${process.versions.node} 에서는 이 검사를 돌릴 수 없습니다.
+` +
+    '  .ts 를 직접 읽으므로 Node 22.18 이상이 필요합니다 (개발·CI 기준은 24).',
+  );
+  process.exit(1);
+}
+
+const { openStatus, isOpenNow, todayIndex } = await import('../src/lib/hours.ts');
+const { summarize, computeMeans, formatCount, formatPrice } = await import('../src/lib/rating.ts');
+const { parseQuery, toChoseong, isChoseongQuery, buildIndex, searchPlaces } = await import('../src/lib/search.ts');
+const { readUrl, toSearch } = await import('../src/lib/url-state.ts');
+const { groupOf, colorOf } = await import('../src/lib/categories.ts');
 
 let passed = 0;
 const it = (name, fn) => {
