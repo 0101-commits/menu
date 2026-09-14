@@ -195,13 +195,15 @@ if (SOURCE !== 'kakao' && !GOOGLE_KEY) {
 const matchedK = (p, cur) => Boolean(p.kakaoId || cur?.kakaoId || cur?.kakaoMiss);
 const matchedG = (p, cur) => Boolean(p.googlePlaceId || cur?.googlePlaceId || cur?.googleMiss);
 
-let targets = places.filter((p) => {
+const needing = places.filter((p) => {
   const cur = store[p.placeId];
   if (A.recheck) return true;
   const needK = SOURCE !== 'google' && !matchedK(p, cur);
   const needG = wantGoogle && !matchedG(p, cur);
   return needK || needG;
 });
+const alreadyMatched = places.length - needing.length;
+let targets = needing;
 if (A.limit) targets = targets.slice(0, Number(A.limit));
 
 console.log(`장소 ${places.length}건 · 대상 ${targets.length}건 · 예상 ${Math.ceil((targets.length * DELAY * (wantGoogle ? 2 : 1)) / 60000)}분`);
@@ -259,7 +261,7 @@ const kRate = ((stat.kHigh + stat.kMed) / (targets.length || 1)) * 100;
 console.log(`\n완료 → ${OUT}`);
 console.log(JSON.stringify(stat));
 console.log(`이번 회차 카카오 매칭률 ${kRate.toFixed(1)}%`);
-console.log(`이미 매칭돼 건너뛴 장소 ${places.length - targets.length}건`);
+console.log(`이미 매칭돼 건너뛴 장소 ${alreadyMatched}건 · 아직 남은 것 ${needing.length - targets.length}건`);
 if (wantGoogle && googleCalls >= GOOGLE_CAP) {
   console.log(`구글 호출 상한(${GOOGLE_CAP})에 걸려 중단했습니다. 다시 실행하면 이어서 받습니다.`);
 }
