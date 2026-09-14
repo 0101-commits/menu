@@ -131,6 +131,7 @@
     <div class="status-head"><span class="dot" aria-hidden="true"></span><span id="statusText">확인하는 중…</span></div>
     <p id="statusDetail">이 주소로 지도 SDK 를 실제로 불러 봅니다.</p>
     <p class="origin" id="originText"></p>
+    <p id="autoNote" hidden>등록이 반영되는지 15초마다 자동으로 다시 확인합니다.</p>
   </section>
 
   <div class="row" style="margin: -16px 0 28px;">
@@ -140,8 +141,16 @@
 
   <ol class="steps" id="steps">
     <li>
-      <p class="step-title">카카오 개발자 콘솔에서 내 앱 열기</p>
-      <p class="step-body">로그인한 뒤 목록에서 맛핀이 쓰는 앱을 고릅니다.</p>
+      <p class="step-title">카카오 개발자 콘솔에서 <strong>맞는 앱</strong> 열기</p>
+      <p class="step-body">
+        앱이 여러 개면 <strong>JavaScript 키가 아래 값인 앱</strong>이어야 합니다.
+        다른 앱에 등록하면 아무리 넣어도 지도가 안 뜹니다. 목록에서 앱을 연 뒤
+        <span class="path">앱 설정 › 앱 키</span> 에서 대조하세요.
+      </p>
+      <div class="copy">
+        <code id="jsKey">489abbeb60a4ef5ff58d960dcaeecb4e</code>
+        <button class="btn" type="button" data-copy="jsKey">복사</button>
+      </div>
       <a class="btn" href="https://developers.kakao.com/console/app" target="_blank" rel="noopener">내 애플리케이션 열기 ↗</a>
     </li>
 
@@ -176,6 +185,19 @@
       <p class="step-body">초록불이 되면 끝입니다. 반영이 늦을 수 있으니 안 되면 30초쯤 뒤 한 번 더 눌러 보세요.</p>
     </li>
   </ol>
+
+  <details id="troubles">
+    <summary>등록했는데도 빨간불이면 — 흔히 틀리는 곳</summary>
+    <ol>
+      <li><strong>다른 앱에 등록했다.</strong> 가장 흔합니다. 1단계의 JavaScript 키와 같은 앱인지 대조하세요.</li>
+      <li><strong>Web 이 아닌 곳에 넣었다.</strong> 플랫폼 화면에는 Android · iOS · Web 이 따로 있습니다. Web 의 “사이트 도메인”이어야 합니다.</li>
+      <li><strong>저장을 안 눌렀다.</strong> 입력만 하고 나가면 반영되지 않습니다. 목록에 실제로 줄이 보여야 합니다.</li>
+      <li><strong>경로까지 넣었다.</strong> <span class="path">https://0101-commits.github.io/menu</span> 가 아니라
+          <span class="path">https://0101-commits.github.io</span> 입니다. 끝에 <span class="path">/</span> 도 빼세요.</li>
+      <li><strong>http 와 https 를 헷갈렸다.</strong> 배포 주소는 <strong>https</strong>, 로컬은 <strong>http</strong> 입니다.</li>
+      <li><strong>반영이 덜 됐다.</strong> 1~2분 걸릴 수 있습니다. 이 페이지가 자동으로 다시 확인합니다.</li>
+    </ol>
+  </details>
 
   <details>
     <summary>지도 말고 나머지 — 카카오 평점까지 채우려면</summary>
@@ -242,6 +264,9 @@
       recheckBtn.disabled = false;
       if (window.kakao && window.kakao.maps) {
         setState('ok', '지도가 켜졌습니다', '이 주소는 카카오 콘솔에 등록돼 있습니다. 맛핀에서 지도가 보입니다.');
+        document.getElementById('autoNote').hidden = true;
+        var t = document.getElementById('troubles');
+        if (t) t.open = false;
       } else {
         setState(
           'bad',
@@ -262,8 +287,31 @@
     setTimeout(finish, 8000);
   }
 
-  recheckBtn.addEventListener('click', check);
+  recheckBtn.addEventListener('click', function () { tries = 0; check(); });
+
+  // 등록하고 돌아왔을 때 다시 누르게 하지 않는다. 빨간불인 동안만 15초마다 조용히 재확인하고,
+  // 초록이 되거나 10분이 지나면 멈춘다. 탭이 안 보이면 쉰다.
+  var tries = 0;
+  var MAX_TRIES = 40;
+  var autoNote = document.getElementById('autoNote');
+
+  function scheduleAuto() {
+    autoNote.hidden = false;
+    setTimeout(function tick() {
+      if (statusEl.classList.contains('is-ok')) { autoNote.hidden = true; return; }
+      if (tries >= MAX_TRIES) {
+        autoNote.textContent = '자동 확인을 멈췄습니다. 등록을 마친 뒤 "다시 확인" 을 눌러 주세요.';
+        return;
+      }
+      if (document.hidden) { setTimeout(tick, 3000); return; }
+      tries++;
+      check();
+      setTimeout(tick, 15000);
+    }, 15000);
+  }
+
   check();
+  scheduleAuto();
 
   // ---- 복사 ----
   function copy(text, btn) {
