@@ -30,4 +30,4 @@ DAILY_KAKAO_LIMIT = "500"
 
 [[kv_namespaces]]
 binding = "RATINGS"
-id = "여기에_wrangler_kv_namespace_create_출력값을_넣는다"
+id = "d4619543152c40e8b9107f85abc83712"
