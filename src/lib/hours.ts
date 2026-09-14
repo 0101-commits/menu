@@ -13,6 +13,9 @@
 //
 //   2) 24:00 을 넘기는 표기(예: "18:00 ~ 02:00")는 자정을 넘긴 영업이다. 그대로 다루면
 //      새벽 1시에 "영업 종료" 로 잘못 나온다.
+//
+// 판정은 전부 한국 시간으로 한다. 서울 가게가 지금 여는지를 보는 사람 현지 시각으로
+// 따지면 안 된다. KST 는 UTC+9 고정이고 서머타임이 없어 오프셋만 더하면 된다.
 
 export type OpenState = 'open' | 'closing-soon' | 'closed' | 'dayoff' | 'unknown';
 
@@ -23,6 +26,16 @@ export interface OpenStatus {
 }
 
 const UNKNOWN: OpenStatus = { state: 'unknown', text: '' };
+
+/** 한국 시간 기준 요일(0=일). 요일 이름을 붙이는 쪽도 같은 기준을 써야 한다. */
+export function seoulDay(now: Date = new Date()): number {
+  return seoul(now).getDay();
+}
+
+/** 어느 시간대에서 보든 한국 시각으로 읽도록 옮긴 Date. 값 읽기 전용이다. */
+function seoul(now: Date): Date {
+  return new Date(now.getTime() + (now.getTimezoneOffset() + 540) * 60000);
+}
 
 function toMinutes(hhmm: string): number | null {
   const m = hhmm.match(/^(\d{1,2}):(\d{2})$/);
@@ -36,7 +49,7 @@ function toMinutes(hhmm: string): number | null {
  */
 export function todayIndex(hoursDay: number | undefined, now: Date): number {
   if (hoursDay == null) return 0;
-  return (now.getDay() - hoursDay + 7) % 7;
+  return (seoul(now).getDay() - hoursDay + 7) % 7;
 }
 
 /**
@@ -51,7 +64,8 @@ export function openStatus(hours: string[] | undefined, now = new Date(), hoursD
   // 배열이 7칸보다 짧을 수 있다(카카오가 덜 주는 경우). 그러면 판정하지 않는다.
   if (idx >= hours.length) return UNKNOWN;
 
-  const nowMin = now.getHours() * 60 + now.getMinutes();
+  const kst = seoul(now);
+  const nowMin = kst.getHours() * 60 + kst.getMinutes();
   const today = hours[idx] ?? '';
 
   if (!today.trim()) return { state: 'dayoff', text: '오늘 휴무' };

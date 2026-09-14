@@ -10,7 +10,7 @@ import { BrandDot, brandName, type Brand } from './BrandDot';
 import { PlaceLinks } from './PlaceLinks';
 import { colorOf } from '../lib/categories';
 import { formatCount, formatPrice, formatScore, rawOf, summarize, type SourceMeans } from '../lib/rating';
-import { openStatus, todayIndex } from '../lib/hours';
+import { openStatus, todayIndex, seoulDay } from '../lib/hours';
 
 interface Props {
   place: Place;
@@ -52,7 +52,7 @@ export function PlaceSheet({
   // 배열의 0번은 오늘이 아니라 수집한 날이다. 요일 이름은 수집 요일부터 붙이고,
   // 굵게 표시할 "오늘" 은 며칠 어긋났는지 계산해 찾는다.
   const now = new Date();
-  const baseDay = k?.hoursDay ?? now.getDay();
+  const baseDay = k?.hoursDay ?? seoulDay(now);
   const todayCell = todayIndex(k?.hoursDay, now);
 
   return (

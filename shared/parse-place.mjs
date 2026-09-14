@@ -86,7 +86,10 @@ export function parseKakao(j) {
 
   // 영업시간은 주 단위 표 전체가 크다. 요일별 "시작~끝" 문자열만 남긴다.
   const days = j?.open_hours?.week_from_today?.week_periods?.[0]?.days ?? [];
-  const hours = days.length ? days.map((d) => d?.on_days?.start_end_time_desc ?? '') : undefined;
+  const rawHours = days.map((d) => d?.on_days?.start_end_time_desc ?? '');
+  // 칸이 전부 비어 있으면 "매일 휴무" 가 아니라 시간 정보가 없는 것이다.
+  // 그대로 두면 화면에 "오늘 휴무" 로 뜬다. 실측 17건 중 3건이 이랬다.
+  const hours = rawHours.some((h) => h.trim()) ? rawHours : undefined;
 
   const menus = (j?.menu?.menus?.items ?? [])
     .slice(0, 3)

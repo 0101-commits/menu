@@ -12,6 +12,11 @@ const A = args();
 const IN = 'raw/ratings.json';
 const OUT = 'public/data/ratings.json';
 
+/** 한국 시간 기준 요일(0=일). KST 는 UTC+9 고정이고 서머타임이 없다. */
+function seoulDay(at) {
+  return new Date(new Date(at).getTime() + 9 * 3600 * 1000).getUTCDay();
+}
+
 const raw = readJson(IN, null);
 if (!raw) {
   console.error(`${IN} 이 없습니다. 먼저 node scripts/ratings.mjs 를 돌리세요.`);
@@ -70,7 +75,11 @@ for (const [sid, v] of Object.entries(raw)) {
         blogs: k.blogs ?? 0,
         ...(k.price ? { price: k.price } : {}),
         // hours 는 수집한 날부터 7일이다. 며칠 지나 보는지 모르면 요일이 어긋난다.
-        ...(k.hours ? { hours: k.hours, hoursDay: new Date(k.at ?? Date.now()).getDay() } : {}),
+        // 요일은 반드시 한국 시간 기준이어야 한다 — CI 러너는 UTC 라, 주간 크론
+        // (일 20:00 UTC = 월 05:00 KST)이 그대로면 매번 하루씩 밀린다.
+        ...(k.hours?.some((h) => h.trim())
+          ? { hours: k.hours, hoursDay: seoulDay(k.at ?? Date.now()) }
+          : {}),
         ...(k.menus?.length ? { menus: k.menus.slice(0, 3) } : {}),
         ...(k.rank ? { rank: k.rank } : {}),
         ...(k.closed ? { closed: true } : {}),

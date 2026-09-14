@@ -77,7 +77,10 @@ it('지번 없이 도로명만 있으면 동을 비운다', () => {
 });
 
 // ---------- 영업시간 ----------
-const at = (h, m = 0) => new Date(2026, 0, 1, h, m);
+// 검사 기계의 시간대와 무관하게 "한국 시각 h시 m분" 을 만든다(CI 는 UTC).
+// 2026-01-01 은 목요일, 2026-01-02 는 금요일이다.
+const kst = (day, h, m = 0) => new Date(Date.UTC(2026, 0, day, h - 9, m));
+const at = (h, m = 0) => kst(1, h, m);
 
 it('영업 중과 마감 임박을 나눈다', () => {
   const hours = ['11:00 ~ 22:00', '', '', '', '', '', ''];
@@ -98,16 +101,24 @@ it('수집한 요일과 보는 요일이 다르면 칸을 민다', () => {
   // 카카오 배열은 "수집한 날부터 7일" 이다. 화요일(2)에 받은 배열을 금요일(5)에 보면
   // 세 칸 뒤(인덱스 3)가 그날이다. 이걸 안 밀면 금요일에 화요일 영업시간을 적용한다.
   const hours = ['00:00 ~ 01:00', '', '', '11:00 ~ 22:00', '', '', ''];
-  const friday = new Date(2026, 0, 2, 15); // 2026-01-02 는 금요일
-  assert.equal(friday.getDay(), 5);
+  const friday = kst(2, 15); // 한국 시각 2026-01-02(금) 15:00
   assert.equal(openStatus(hours, friday, 2).state, 'open');   // 인덱스 3 = 11:00~22:00
   assert.equal(openStatus(hours, friday, 5).state, 'closed'); // 인덱스 0 = 00:00~01:00
   assert.equal(todayIndex(2, friday), 3);
   assert.equal(todayIndex(undefined, friday), 0); // 모르면 예전대로 0 번
+  assert.equal(todayIndex(5, friday), 0); // 같은 요일이면 그대로
 });
 
 it('오늘이 빈 문자열이면 휴무', () => {
   assert.equal(openStatus(['', '11:00 ~ 22:00'], at(15)).state, 'dayoff');
+});
+
+it('판정은 보는 사람 시간대가 아니라 한국 시각으로 한다', () => {
+  // 한국 시각 15:00 은 UTC 06:00 이다. 어느 시간대에서 돌려도 "영업 중" 이어야 한다.
+  const hours = ['11:00 ~ 22:00', '', '', '', '', '', ''];
+  assert.equal(openStatus(hours, new Date('2026-01-01T06:00:00Z')).state, 'open');
+  // 한국 시각 02:00(= 전날 17:00 UTC)에는 닫혀 있다.
+  assert.equal(openStatus(hours, new Date('2025-12-31T17:00:00Z')).state, 'closed');
 });
 
 it('영업시간이 없으면 모른다고 한다', () => {
