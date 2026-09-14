@@ -22,6 +22,7 @@
 //   node scripts/match.mjs                  아직 매칭 안 된 것만
 //   node scripts/match.mjs --limit=200
 //   node scripts/match.mjs --source=kakao   구글 건너뛰기
+//   node scripts/match.mjs --retry-miss     지난번에 못 찾은 것만 다시 (알고리즘을 고친 뒤)
 //   node scripts/match.mjs --recheck        이미 매칭된 것도 다시
 
 import fs from 'node:fs';
@@ -144,7 +145,7 @@ function pickKakao(place, docs) {
 // fieldMask 를 id·location·displayName 으로 제한하면 Text Search Pro SKU 다.
 // 월 5,000 건까지 무료라 4,000 여 건 1 회 매칭은 요금이 발생하지 않는다.
 // 이름 확인 없이 id 만 받으면(무료 IDs Only) 오매칭을 걸러낼 수 없어 쓰지 않는다.
-async function googleSearch(place) {
+async function googleQuery(textQuery, place) {
   const res = await fetch('https://places.googleapis.com/v1/places:searchText', {
     method: 'POST',
     headers: {
@@ -153,10 +154,11 @@ async function googleSearch(place) {
       'X-Goog-FieldMask': 'places.id,places.location,places.displayName',
     },
     body: JSON.stringify({
-      textQuery: `${place.name} ${place.sigungu ?? ''} ${place.dong ?? ''}`.trim(),
+      textQuery,
       languageCode: 'ko',
       regionCode: 'KR',
-      maxResultCount: 5,
+      // 요금은 요청 단위라 후보를 더 받아도 비용이 같다. 넓게 보고 판정에서 거른다.
+      maxResultCount: 10,
       locationBias: {
         circle: { center: { latitude: place.lat, longitude: place.lng }, radius: 1000 },
       },
@@ -167,6 +169,24 @@ async function googleSearch(place) {
   if (res.status === 429) throw new Error('RATE_LIMIT');
   if (!res.ok) throw new Error(`HTTP ${res.status} ${(await res.text()).slice(0, 160)}`);
   return (await res.json()).places ?? [];
+}
+
+/**
+ * 카카오와 같은 이유로 지점 표기가 발목을 잡는다. 이름 그대로 찾아 후보가 없으면
+ * 지점 표기를 떼고 한 번 더 찾는다. 채택 규칙(이름 정규화 일치 + 거리)은 그대로다 —
+ * 후보를 넓게 데려올 뿐, 무엇을 받아들일지는 느슨해지지 않는다.
+ */
+async function googleSearch(place) {
+  const where = `${place.sigungu ?? ''} ${place.dong ?? ''}`.trim();
+  const docs = await googleQuery(`${place.name} ${where}`.trim(), place);
+  if (docs.length) return docs;
+
+  const base = baseName(place.name);
+  if (base && base !== place.name) {
+    await sleep(DELAY);
+    return googleQuery(`${base} ${where}`.trim(), place);
+  }
+  return docs;
 }
 
 function pickGoogle(place, docs) {
@@ -216,8 +236,12 @@ if (SOURCE !== 'kakao' && !GOOGLE_KEY) {
 // raw/match.json 은 커밋되지 않아 CI 에서는 매 실행이 빈 상태로 시작한다. places.json 의
 // kakaoId·googlePlaceId 를 보지 않으면 매번 4,084건을 처음부터 다시 부르게 되는데,
 // 구글 Text Search 무료 한도가 월 5,000건이라 한 달에 두 번만 돌려도 요금이 나온다.
-const matchedK = (p, cur) => Boolean(p.kakaoId || cur?.kakaoId || cur?.kakaoMiss);
-const matchedG = (p, cur) => Boolean(p.googlePlaceId || cur?.googlePlaceId || cur?.googleMiss);
+// --retry-miss 는 "못 찾음" 표시를 무시한다. 표시가 남아 있으면 개선한 알고리즘이
+// 영영 적용되지 않는다(진행분 캐시가 그 표시를 실행 간에 이어 주기 때문에).
+const RETRY_MISS = Boolean(A['retry-miss']);
+const missOK = (flag) => (RETRY_MISS ? false : Boolean(flag));
+const matchedK = (p, cur) => Boolean(p.kakaoId || cur?.kakaoId) || missOK(cur?.kakaoMiss);
+const matchedG = (p, cur) => Boolean(p.googlePlaceId || cur?.googlePlaceId) || missOK(cur?.googleMiss);
 
 const needing = places.filter((p) => {
   const cur = store[p.placeId];

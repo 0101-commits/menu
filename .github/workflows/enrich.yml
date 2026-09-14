@@ -32,6 +32,11 @@ on:
         description: '몇 곳만 시험해 볼 때 (비우면 전량)'
         required: false
         default: ''
+      retry_miss:
+        description: '지난번에 못 찾은 곳만 다시 매칭 (알고리즘을 고친 뒤)'
+        type: boolean
+        required: false
+        default: false
       skip_ratings:
         description: '매칭만 하고 카카오 평점 수집은 건너뛴다'
         type: boolean
@@ -75,7 +80,7 @@ jobs:
         env:
           KAKAO_REST_KEY: ${{ secrets.KAKAO_REST_KEY }}
           GOOGLE_PLACES_KEY: ${{ secrets.GOOGLE_PLACES_KEY }}
-        run: node scripts/match.mjs ${{ inputs.limit && format('--limit={0}', inputs.limit) || '' }}
+        run: node scripts/match.mjs ${{ inputs.limit && format('--limit={0}', inputs.limit) || '' }} ${{ inputs.retry_miss && '--retry-miss' || '' }}
 
       # 매칭 결과를 places.json 에 반영한다(kakaoId 필드).
       - name: places.json 갱신 + 게이트
