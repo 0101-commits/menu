@@ -11,6 +11,7 @@
 import assert from 'node:assert/strict';
 import { parseRegion } from './lib/region.mjs';
 import { parseNaver, parseKakao } from '../shared/parse-place.mjs';
+import { judge, norm } from './lib/match-rules.mjs';
 
 // src/lib 의 .ts 를 그대로 읽는다. Node 22.18+ 부터 타입을 벗겨 실행한다.
 // 그보다 낮으면 ERR_UNKNOWN_FILE_EXTENSION 만 뜨고 원인이 안 보인다.
@@ -256,6 +257,39 @@ it('14 종이 모두 색군을 갖는다', () => {
   assert.equal(groupOf('일식').key, 'sea');
   assert.equal(groupOf('구이').key, 'meat');
   assert.equal(groupOf('없는분류').key, 'other');
+});
+
+// ---------- 매칭 판정 ----------
+// 오매칭이 가장 나쁜 실패다. 실제로 부딪힌 사례를 그대로 박아 둔다.
+const m = (name, cand, dist) => judge({ name }, cand, dist);
+
+it('구글의 덧붙은 외국어·업종어를 넘어 같은 가게로 본다', () => {
+  // 구글 한국 등록명은 상호 뒤에 외국어나 업종어가 붙는다. 정확히 일치를 요구하면 전부 떨어진다.
+  assert.equal(m('기태만두', '기태만두Gitae饺子', 4), 'high');
+  assert.equal(m('보슬보슬', '보슬보슬 역삼본점(restaurants ㅣ 餐馆 )', 5), 'high');
+  assert.equal(m('코야코', '코야코 떡볶이', 4), 'high');
+  assert.equal(m('덕복희집 떡볶이 수제튀김', '덕복희집 The Oriental Bistro DeokBoKi', 6), 'medium');
+});
+
+it('우리 쪽 지점 표기도 넘어간다', () => {
+  assert.equal(m('백나예김밥 효자촌서현점', '백나예김밥', 13), 'high');
+  assert.equal(m('이공김밥안암본점', '이공김밥', 6), 'high');
+  assert.equal(m('수진분식 성남중앙지하쇼핑몰점', '수진분식', 21), 'high');
+});
+
+it('이름이 통째로 지워지지 않는다', () => {
+  // 예전 정규식이 "보슬보슬역삼본점" 을 빈 문자열로 만들어 매칭이 조용히 실패했다.
+  assert.ok(norm('보슬보슬 역삼본점').length > 0);
+  assert.ok(norm('또보겠지떡볶이 해피토스점').length > 3);
+  assert.ok(norm('이공김밥안암본점').length > 3);
+});
+
+it('같은 상호 다른 지점을 붙이지 않는다', () => {
+  // 여기서 틀리면 다른 가게의 평점이 조용히 붙는다.
+  assert.equal(m('스타벅스 강남점', '스타벅스 역삼점', 40), null);
+  assert.equal(m('김밥천국 A점', '김밥천국 B점', 200), null);
+  assert.equal(m('맛있는집', '맛있는집', 500), null); // 이름이 같아도 멀면 안 된다
+  assert.equal(m('WWW.떡볶이.COM', '떡볶이닷컴', 1), null); // 겹치는 앞부분이 없다
 });
 
 // ---------- 평점 파서 ----------

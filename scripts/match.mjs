@@ -7,9 +7,8 @@
 // 그래서 이름과 거리가 함께 맞을 때만 채택하고, 애매하면 비워 둔다.
 // 비어 있으면 화면에서 "—" 로 보일 뿐이지만, 틀린 값은 거짓말이 된다.
 //
-//   high    정규화한 이름이 같고 80m 이내
-//   medium  이름이 같고 300m 이내  또는  30m 이내이고 업종 대분류가 같음
-//   (그 외) 채택하지 않음
+// 채택 규칙은 scripts/lib/match-rules.mjs 의 judge() 한 곳에 있고
+// scripts/selftest.mjs 가 실제 사례로 검사한다.
 //
 // 키
 //   KAKAO_REST_KEY    카카오 개발자 콘솔 > 내 애플리케이션 > 앱 키 > REST API 키
@@ -27,6 +26,7 @@
 
 import fs from 'node:fs';
 import { readPlaces, readJson, writeJson, sleep, args } from './lib/places-io.mjs';
+import { judge } from './lib/match-rules.mjs';
 
 const OUT = 'raw/match.json';
 const A = args();
@@ -44,19 +44,6 @@ const GOOGLE_KEY = process.env.GOOGLE_PLACES_KEY;
 if (!KAKAO_KEY && SOURCE !== 'google') {
   console.error('KAKAO_REST_KEY 가 없습니다. .env 에 넣거나 환경변수로 전달하세요. (docs/keys.html 참고)');
   process.exit(1);
-}
-
-// ---------- 이름 정규화 ----------
-// 지점 표기는 소스마다 다르다. "자매수산 강남본점" / "자매수산" 을 같게 본다.
-const BRANCH = /(본점|직영점|점포|\d+호점|[가-힣A-Za-z]{1,10}점)$/;
-function norm(name) {
-  let s = String(name ?? '')
-    .replace(/\(.*?\)|\[.*?\]/g, '')
-    .replace(/[\s·・.,'"`~!@#$%^&*_+=|\\/-]/g, '')
-    .toLowerCase();
-  // 지점 접미사는 한 번만 떼어 낸다. 반복하면 "고기집" 의 "집" 까지 깎인다.
-  s = s.replace(BRANCH, '');
-  return s;
 }
 
 function distanceM(lat1, lng1, lat2, lng2) {
@@ -123,15 +110,11 @@ async function kakaoSearch(place) {
 }
 
 function pickKakao(place, docs) {
-  const target = norm(place.name);
   let best = null;
   for (const d of docs) {
     const dist = distanceM(place.lat, place.lng, Number(d.y), Number(d.x));
-    const same = norm(d.place_name) === target;
-    let confidence = null;
-    if (same && dist <= 80) confidence = 'high';
-    else if (same && dist <= 300) confidence = 'medium';
-    else if (dist <= 30 && coarseOk(place, d)) confidence = 'medium';
+    let confidence = judge(place, d.place_name, dist);
+    if (!confidence && dist <= 30 && coarseOk(place, d)) confidence = 'medium';
     if (!confidence) continue;
     const rank = confidence === 'high' ? 0 : 1;
     if (!best || rank < best.rank || (rank === best.rank && dist < best.dist)) {
@@ -204,16 +187,12 @@ function debugCandidates(kind, place, docs, coords) {
 }
 
 function pickGoogle(place, docs) {
-  const target = norm(place.name);
   let best = null;
   for (const d of docs) {
     const lat = d.location?.latitude, lng = d.location?.longitude;
     if (lat == null || lng == null) continue;
     const dist = distanceM(place.lat, place.lng, lat, lng);
-    const same = norm(d.displayName?.text) === target;
-    let confidence = null;
-    if (same && dist <= 80) confidence = 'high';
-    else if (same && dist <= 300) confidence = 'medium';
+    const confidence = judge(place, d.displayName?.text, dist);
     if (!confidence) continue;
     const rank = confidence === 'high' ? 0 : 1;
     if (!best || rank < best.rank || (rank === best.rank && dist < best.dist)) {
