@@ -1,4 +1,4 @@
-name: 데이터 보강 (카카오)
+name: 데이터 보강
 
 # 카카오 장소 ID 를 붙이고 카카오 평점·영업시간·메뉴·가격을 채운다.
 #
@@ -7,11 +7,21 @@ name: 데이터 보강 (카카오)
 #   Actions 러너 IP 에서 자주 막힌다(docs/myplace-api.md). 여기서 쓰는 건
 #   KAKAO_REST_KEY 하나뿐이라 쿠키와 무관하게 언제든 돌릴 수 있다.
 #
-# 손으로 실행한다. Actions 탭 > 데이터 보강 (카카오) > Run workflow.
-# 4,084곳 기준 매칭 ~10분 + 평점 ~50분. 끝나면 main 에 데이터만 커밋하고,
+# 월 1회 자동 + 손으로 실행. Actions 탭 > 데이터 보강 > Run workflow.
+# 4,084곳 기준 매칭 ~20분 + 카카오 평점 ~50분. 끝나면 main 에 데이터만 커밋하고,
 # 그 커밋이 배포 워크플로를 깨운다.
+#
+# 무엇이 얼마나 드는가
+#   카카오 매칭·평점   무료(일 100,000건). 매달 전량 다시 받아도 상관없다.
+#   구글 place ID      한 번 붙이면 끝이다. ID 는 영구 저장이 허용되고 바뀌지 않으므로
+#                      다음 달부터는 새로 늘어난 가게만 조회한다(월 수십 건).
+#   구글 평점          여기서 안 받는다. 30일 넘게 저장할 수 없어 배치로는 못 넣고,
+#                      카드를 열 때 Worker 가 받아 KV 에 30일 둔다.
 
 on:
+  schedule:
+    # 매월 1일 04:00 KST. 카카오 값(영업시간·메뉴·가격)은 바뀌므로 한 달에 한 번 새로 받는다.
+    - cron: '0 19 1 * *'
   workflow_dispatch:
     inputs:
       delay:
@@ -22,9 +32,15 @@ on:
         description: '몇 곳만 시험해 볼 때 (비우면 전량)'
         required: false
         default: ''
+      skip_ratings:
+        description: '매칭만 하고 카카오 평점 수집은 건너뛴다'
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: write
+  actions: write # 데이터 커밋 뒤 배포 워크플로를 직접 깨우기 위해
 
 # 두 번 겹쳐 돌면 서로의 raw/ 를 덮어쓴다.
 concurrency:
@@ -45,6 +61,15 @@ jobs:
 
       - run: npm ci
 
+      # raw/ 는 커밋되지 않는다. 실행 간에 이어 붙이지 않으면 중간에 실패했을 때
+      # 다음 실행이 처음부터 다시 조회한다 — 구글은 그게 곧 요금이다.
+      - name: 진행분 복원
+        uses: actions/cache/restore@v4
+        with:
+          path: raw
+          key: enrich-raw-${{ github.run_id }}
+          restore-keys: enrich-raw-
+
       # 카카오 장소 ID 매칭. 구글 키는 없으면 그 소스만 건너뛴다.
       - name: 장소 ID 매칭
         env:
@@ -58,9 +83,15 @@ jobs:
 
       # raw/ 는 커밋되지 않으므로 지난 결과를 되살린 뒤 카카오 몫만 받는다.
       - name: 카카오 평점 수집
+        if: ${{ !inputs.skip_ratings }}
         run: |
           node scripts/restore-ratings.mjs
           node scripts/ratings.mjs --source=kakao --delay=${{ inputs.delay }} ${{ inputs.limit && format('--limit={0}', inputs.limit) || '' }}
+
+      # 평점을 건너뛰어도 ratings.json 은 있어야 게이트가 돈다.
+      - name: 평점 원본 복원 (건너뛴 경우)
+        if: ${{ inputs.skip_ratings }}
+        run: node scripts/restore-ratings.mjs
 
       - name: ratings.json 갱신 + 게이트
         run: node scripts/build-ratings.mjs
@@ -82,7 +113,16 @@ jobs:
           done
 
       # 데이터만 커밋한다. 이 커밋이 배포 워크플로를 깨운다.
+      # 실패해도 남긴다. 여기까지 받은 건 다음 실행이 이어받는다.
+      - name: 진행분 저장
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: raw
+          key: enrich-raw-${{ github.run_id }}
+
       - name: 커밋
+        id: commit
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email 'github-actions[bot]@users.noreply.github.com'
@@ -91,5 +131,17 @@ jobs:
             echo '바뀐 데이터가 없습니다.' >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
-          git commit -m 'data: 카카오 매칭·평점 보강 (자동)'
+          git commit -m 'data: 카카오·구글 매칭·평점 보강 (자동)'
+          # 돌리는 사이에 main 이 움직였을 수 있다. 그대로 push 하면 한 시간 작업이
+          # 마지막 줄에서 헛수고가 된다.
+          git pull --rebase origin main
           git push
+          echo 'pushed=true' >> "$GITHUB_OUTPUT"
+
+      # GITHUB_TOKEN 으로 민 푸시는 다른 워크플로를 깨우지 않는다(재귀 방지 정책).
+      # 그래서 데이터만 올라가고 사이트는 옛 데이터를 계속 서빙한다. 직접 부른다.
+      - name: 배포 깨우기
+        if: steps.commit.outputs.pushed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh workflow run deploy.yml --ref main

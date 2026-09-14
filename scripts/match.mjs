@@ -32,6 +32,11 @@ const A = args();
 const SOURCE = A.source ?? 'both';
 const DELAY = Number(A.delay ?? 120);
 
+// 구글 Text Search 는 월 5,000건이 무료다. 한 실행이 그걸 통째로 넘기지 못하게 막는다.
+// 넘치면 그 회차는 거기서 멈추고 다음 실행이 이어받는다(이미 붙은 건 건너뛰므로 낭비가 없다).
+const GOOGLE_CAP = Number(A['google-cap'] ?? 4500);
+let googleCalls = 0;
+
 const KAKAO_KEY = process.env.KAKAO_REST_KEY;
 const GOOGLE_KEY = process.env.GOOGLE_PLACES_KEY;
 
@@ -182,11 +187,19 @@ if (SOURCE !== 'kakao' && !GOOGLE_KEY) {
   console.log('GOOGLE_PLACES_KEY 없음 — 구글 매칭은 건너뜁니다 (카카오만 진행)');
 }
 
+// 이미 붙어 있는 매칭은 다시 조회하지 않는다.
+//
+// raw/match.json 은 커밋되지 않아 CI 에서는 매 실행이 빈 상태로 시작한다. places.json 의
+// kakaoId·googlePlaceId 를 보지 않으면 매번 4,084건을 처음부터 다시 부르게 되는데,
+// 구글 Text Search 무료 한도가 월 5,000건이라 한 달에 두 번만 돌려도 요금이 나온다.
+const matchedK = (p, cur) => Boolean(p.kakaoId || cur?.kakaoId || cur?.kakaoMiss);
+const matchedG = (p, cur) => Boolean(p.googlePlaceId || cur?.googlePlaceId || cur?.googleMiss);
+
 let targets = places.filter((p) => {
   const cur = store[p.placeId];
   if (A.recheck) return true;
-  const needK = SOURCE !== 'google' && !cur?.kakaoId && !cur?.kakaoMiss;
-  const needG = wantGoogle && !cur?.googlePlaceId && !cur?.googleMiss;
+  const needK = SOURCE !== 'google' && !matchedK(p, cur);
+  const needG = wantGoogle && !matchedG(p, cur);
   return needK || needG;
 });
 if (A.limit) targets = targets.slice(0, Number(A.limit));
@@ -199,7 +212,7 @@ let done = 0;
 for (const p of targets) {
   const cur = (store[p.placeId] ??= { name: p.name });
 
-  if (SOURCE !== 'google' && (A.recheck || (!cur.kakaoId && !cur.kakaoMiss))) {
+  if (SOURCE !== 'google' && (A.recheck || !matchedK(p, cur))) {
     const docs = await withRetry(() => kakaoSearch(p), 'kakao');
     if (docs.__error) { stat.kErr++; }
     else {
@@ -216,7 +229,8 @@ for (const p of targets) {
     await sleep(DELAY);
   }
 
-  if (wantGoogle && (A.recheck || (!cur.googlePlaceId && !cur.googleMiss))) {
+  if (wantGoogle && googleCalls < GOOGLE_CAP && (A.recheck || !matchedG(p, cur))) {
+    googleCalls++;
     const docs = await withRetry(() => googleSearch(p), 'google');
     if (docs.__error) { stat.gErr++; }
     else {
@@ -245,6 +259,10 @@ const kRate = ((stat.kHigh + stat.kMed) / (targets.length || 1)) * 100;
 console.log(`\n완료 → ${OUT}`);
 console.log(JSON.stringify(stat));
 console.log(`이번 회차 카카오 매칭률 ${kRate.toFixed(1)}%`);
+console.log(`이미 매칭돼 건너뛴 장소 ${places.length - targets.length}건`);
+if (wantGoogle && googleCalls >= GOOGLE_CAP) {
+  console.log(`구글 호출 상한(${GOOGLE_CAP})에 걸려 중단했습니다. 다시 실행하면 이어서 받습니다.`);
+}
 
 // medium 은 사람이 확인할 수 있게 리포트로 남긴다. 확정·교정은 raw/match.json 을 직접 고치면 된다.
 fs.mkdirSync('reports', { recursive: true });

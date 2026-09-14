@@ -39,6 +39,10 @@ for (const [sid, v] of Object.entries(raw)) {
   if (!place) { stat.orphan++; continue; } // 즐겨찾기에서 빠진 장소의 잔여 평점
 
   const entry = {};
+  // 되살린 값(restore-ratings)에는 top-level closed 만 남아 있을 수 있다.
+  // 네이버 페이지가 사라진 장소는 naver 블록 자체가 없어서, 이걸 안 옮기면
+  // 다음 빌드에서 "폐업 추정" 배지가 조용히 사라진다.
+  if (v.closed) entry.closed = true;
 
   const n = v.naver;
   if (n) {
