@@ -37,6 +37,11 @@ on:
         type: boolean
         required: false
         default: false
+      debug:
+        description: '떨어진 후보를 로그에 찍는다 (원인 진단용)'
+        type: boolean
+        required: false
+        default: false
       skip_ratings:
         description: '매칭만 하고 카카오 평점 수집은 건너뛴다'
         type: boolean
@@ -80,7 +85,7 @@ jobs:
         env:
           KAKAO_REST_KEY: ${{ secrets.KAKAO_REST_KEY }}
           GOOGLE_PLACES_KEY: ${{ secrets.GOOGLE_PLACES_KEY }}
-        run: node scripts/match.mjs ${{ inputs.limit && format('--limit={0}', inputs.limit) || '' }} ${{ inputs.retry_miss && '--retry-miss' || '' }}
+        run: node scripts/match.mjs ${{ inputs.limit && format('--limit={0}', inputs.limit) || '' }} ${{ inputs.retry_miss && '--retry-miss' || '' }} ${{ inputs.debug && '--debug' || '' }}
 
       # 매칭 결과를 places.json 에 반영한다(kakaoId 필드).
       - name: places.json 갱신 + 게이트

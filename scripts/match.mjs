@@ -189,6 +189,20 @@ async function googleSearch(place) {
   return docs;
 }
 
+// --debug 일 때, 왜 떨어졌는지 보려고 후보를 그대로 찍는다.
+// 미매칭 원인이 "후보가 없음" 인지 "후보는 있는데 이름·거리가 안 맞음" 인지
+// 구분하지 못하면 어디를 고쳐야 할지 알 수 없다.
+function debugCandidates(kind, place, docs, coords) {
+  if (!A.debug) return;
+  if (!docs.length) { console.log(`  [${kind}] ${place.name} — 후보 0건`); return; }
+  const lines = docs.slice(0, 3).map((d) => {
+    const c = coords(d);
+    const dist = c ? Math.round(distanceM(place.lat, place.lng, c[0], c[1])) : '?';
+    return `${d.name ?? d.place_name ?? d.displayName?.text} (${dist}m)`;
+  });
+  console.log(`  [${kind}] ${place.name} → ${lines.join(' | ')}`);
+}
+
 function pickGoogle(place, docs) {
   const target = norm(place.name);
   let best = null;
@@ -267,6 +281,7 @@ for (const p of targets) {
     if (docs.__error) { stat.kErr++; }
     else {
       const hit = pickKakao(p, docs);
+      if (!hit) debugCandidates('kakao', p, docs, (d) => [Number(d.y), Number(d.x)]);
       if (hit) {
         cur.kakaoId = hit.id;
         cur.confidence = hit.confidence;
@@ -285,6 +300,7 @@ for (const p of targets) {
     if (docs.__error) { stat.gErr++; }
     else {
       const hit = pickGoogle(p, docs);
+      if (!hit) debugCandidates('google', p, docs, (d) => (d.location ? [d.location.latitude, d.location.longitude] : null));
       if (hit) {
         cur.googlePlaceId = hit.id;
         cur.googleConfidence = hit.confidence;
