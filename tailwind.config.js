@@ -4,6 +4,30 @@ export default {
   content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
   theme: {
     extend: {
+      // Tailwind preflight 가 html 의 font-family 를 이 값으로 박는다. 여기서 정해 주지 않으면
+      // 기본값 ui-sans-serif/system-ui 가 남아 윈도우에서 맑은 고딕으로 떨어진다 —
+      // SEED 는 --seed-font-family 를 선언만 하고 어느 요소에도 적용하지 않으므로,
+      // index.css 의 import 순서와 무관하게 preflight 가 항상 이긴다.
+      // Pretendard 를 맨 앞에 두어 OS 와 상관없이 같은 글꼴로 읽히게 한다.
+      fontFamily: {
+        sans: [
+          '"Pretendard Variable"',
+          'Pretendard',
+          '-apple-system',
+          'BlinkMacSystemFont',
+          '"Apple SD Gothic Neo"',
+          '"Segoe UI"',
+          'Roboto',
+          '"Helvetica Neue"',
+          'Arial',
+          '"Noto Sans"',
+          'sans-serif',
+          '"Apple Color Emoji"',
+          '"Segoe UI Emoji"',
+          '"Segoe UI Symbol"',
+          '"Noto Color Emoji"',
+        ],
+      },
       colors: {
         primary: {
           DEFAULT: 'var(--matpin-primary)',

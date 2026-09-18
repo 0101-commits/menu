@@ -9,6 +9,14 @@
     <meta name="description" content="네이버 즐겨찾기에 저장한 맛집을 지도에서 찾아봅니다." />
     <title>맛핀</title>
 
+    <!-- 본문 글꼴. dynamic-subset 은 화면에 실제로 쓰인 글자가 든 청크만 받아오므로
+         첫 화면 비용이 수십 KB 다. 로컬에 Pretendard 가 깔린 기기는 이 요청조차 안 한다. -->
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.css"
+    />
+
     <script>
       // SEED 는 system 모드에서 data-seed-user-color-scheme 을 읽는다. 첫 페인트 전에 정해야
       // 화면이 번쩍이지 않는다. 사용자가 고른 값이 있으면 그게 우선.
