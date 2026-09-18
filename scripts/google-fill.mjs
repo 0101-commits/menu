@@ -21,6 +21,7 @@
 import fs from 'node:fs';
 import { readPlaces, readJson, writeJson, sleep, args } from './lib/places-io.mjs';
 import { fetchGoogle } from '../shared/parse-place.mjs';
+import { toAggregate } from './lib/google-aggregate.mjs';
 
 const LEDGER = 'raw/google.json';
 const BULK = 'raw/google-kv.json';
@@ -118,9 +119,18 @@ writeJson(LEDGER, ledger);
 
 // wrangler 가 읽는 대량 업로드 형식. 값에 TTL 을 주지 않는다 —
 // 주면 30일 뒤 사라지고, 다시 채우는 데 매달 $52 가 든다.
-const bulk = Object.entries(ledger)
-  .filter(([, v]) => !v.gone)
-  .map(([gid, v]) => ({ key: `g:${gid}`, value: JSON.stringify(v) }));
+//
+// 두 가지를 같이 올린다.
+//   g:{구글 place ID}  상세 화면이 한 곳을 열 때 쓴다
+//   g:all              목록이 한 번에 받아 가는 덩어리. 네이버 place ID 로 키를 다시 잡는다.
+//                      장소마다 KV 를 읽으면 목록 한 번에 3,613번 읽기가 되기 때문이다.
+const aggregate = toAggregate(places, ledger);
+const bulk = [
+  ...Object.entries(ledger)
+    .filter(([, v]) => !v.gone)
+    .map(([gid, v]) => ({ key: `g:${gid}`, value: JSON.stringify(v) })),
+  { key: 'g:all', value: JSON.stringify(aggregate) },
+];
 
 fs.mkdirSync('raw', { recursive: true });
 fs.writeFileSync(BULK, JSON.stringify(bulk));
@@ -128,5 +138,6 @@ fs.writeFileSync(BULK, JSON.stringify(bulk));
 console.log(`\n완료 · 성공 ${ok} · 없어짐 ${gone} · 실패 ${err}`);
 console.log(`${LEDGER} — ${Object.keys(ledger).length}건`);
 console.log(`${BULK} — KV 에 올릴 ${bulk.length}건 (${(fs.statSync(BULK).size / 1024).toFixed(0)}KB)`);
+console.log(`  그중 목록용 g:all — ${Object.keys(aggregate).length}곳 (${(JSON.stringify(aggregate).length / 1024).toFixed(0)}KB)`);
 console.log('\n올리기 (worker 폴더에서):');
 console.log(`  npx wrangler kv bulk put ../${BULK} --binding RATINGS --remote`);

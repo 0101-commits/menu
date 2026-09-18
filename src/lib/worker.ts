@@ -9,7 +9,7 @@
 //
 // Worker 주소가 없으면 이 기능만 조용히 꺼진다. 앱의 나머지는 그대로 돈다.
 
-import type { Ratings } from '../types';
+import type { GoogleRating, Ratings } from '../types';
 
 export const RATINGS_API: string | undefined = import.meta.env.VITE_RATINGS_API || undefined;
 
@@ -61,4 +61,21 @@ export function fetchRatings(q: RatingQuery): Promise<Ratings> {
 
   cache.set(key, p);
   return p;
+}
+
+/**
+ * 목록용 구글 평점 한 덩어리. 키는 네이버 place ID 다.
+ *
+ * 장소마다 부르면 목록 한 번에 수천 번 요청이 된다. Worker 가 미리 채워 둔 것을
+ * KV 키 하나로 들고 있다가 그대로 준다 — 이 경로는 구글 API 를 절대 부르지 않으므로
+ * 요금이 붙지 않고, 채워진 만큼만 온다(아직 안 채웠으면 빈 객체다).
+ *
+ * 실패하면 빈 객체를 준다. 구글 칸은 없어도 되는 정보라 앱을 멈출 이유가 없다.
+ */
+export function fetchGoogleAll(): Promise<Record<string, GoogleRating>> {
+  if (!RATINGS_API || !GOOGLE_ENABLED) return Promise.resolve({});
+  const url = new URL('google', RATINGS_API.endsWith('/') ? RATINGS_API : `${RATINGS_API}/`);
+  return fetch(url, { signal: AbortSignal.timeout(15000) })
+    .then((r) => (r.ok ? (r.json() as Promise<Record<string, GoogleRating>>) : {}))
+    .catch(() => ({}));
 }

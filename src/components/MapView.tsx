@@ -107,6 +107,7 @@ interface Props {
   places: Place[];
   ratings: RatingsMap;
   means: SourceMeans;
+  showGoogle: boolean;
   selectedCategories: string[];
   selectedPlace: Place | null;
   onSelect: (p: Place | null) => void;
@@ -124,7 +125,7 @@ interface Props {
 }
 
 export function MapView({
-  places, ratings, means, selectedCategories, selectedPlace,
+  places, ratings, means, showGoogle, selectedCategories, selectedPlace,
   onSelect, onDetail, onBoundsChange, focus, discovered, discoveredRatings,
   onDiscoveredOpen, discoverFailed, discoverUnavailable, topOffset, onStatusChange,
 }: Props) {
@@ -339,11 +340,12 @@ export function MapView({
         place={selectedPlace}
         ratings={ratings[selectedPlace.placeId]}
         means={means}
+        showGoogle={showGoogle}
         onClose={() => cb.current.onSelect(null)}
         onDetail={onDetail}
       />,
     );
-  }, [selectedPlace, status, ratings, means, onDetail]);
+  }, [selectedPlace, status, ratings, means, showGoogle, onDetail]);
 
   // ---------- 반경·이동 ----------
   useEffect(() => {

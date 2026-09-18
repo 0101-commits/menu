@@ -119,6 +119,19 @@ export default {
     if (!allowed.includes(origin)) return json({ error: 'origin' }, 403, cors);
 
     const url = new URL(request.url);
+
+    // 목록용. 미리 채워 둔 구글 평점을 한 덩어리로 돌려준다.
+    // 장소마다 부르면 목록 한 번에 수천 번 요청이 된다 — 여기서는 KV 읽기 한 번이다.
+    // 이 경로는 구글 API 를 절대 부르지 않는다. 채워진 만큼만 준다.
+    if (url.pathname === '/google') {
+      const all = await env.RATINGS.get('g:all', 'json');
+      return json(all ?? {}, 200, {
+        ...cors,
+        'x-cache': all ? 'hit' : 'empty',
+        'cache-control': 'public, max-age=3600',
+      });
+    }
+
     const q = {
       n: url.searchParams.get('n') ?? '',
       k: url.searchParams.get('k') ?? '',

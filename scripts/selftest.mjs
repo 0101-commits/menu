@@ -12,6 +12,7 @@ import assert from 'node:assert/strict';
 import { parseRegion } from './lib/region.mjs';
 import { parseNaver, parseKakao } from '../shared/parse-place.mjs';
 import { judge, norm } from './lib/match-rules.mjs';
+import { toAggregate } from './lib/google-aggregate.mjs';
 
 // src/lib 의 .ts 를 그대로 읽는다. Node 22.18+ 부터 타입을 벗겨 실행한다.
 // 그보다 낮으면 ERR_UNKNOWN_FILE_EXTENSION 만 뜨고 원인이 안 보인다.
@@ -387,6 +388,38 @@ it('네이버: 사라진 장소는 폐업으로 분류한다', () => {
   // placeDetail 이 null 인 페이지가 HTTP 200 으로 온다. 파싱 실패로 세면 게이트가 오작동한다.
   const html = '__APOLLO_STATE__ = {"ROOT_QUERY":{"placeDetail({\\"input\\":{\\"id\\":\\"123\\"}})":null}}';
   assert.deepEqual(parseNaver(html, '123'), { gone: true });
+});
+
+it('구글 집계: 네이버 place ID 로 키를 다시 잡는다', () => {
+  // 원장은 구글 place ID 로, 앱은 네이버 place ID 로 찾는다. 이 변환이 어긋나면
+  // 평점이 엉뚱한 가게에 붙는데 화면에서는 멀쩡해 보인다.
+  const places = [
+    { placeId: 'n1', googlePlaceId: 'g1' },
+    { placeId: 'n2', googlePlaceId: 'g2' },
+    { placeId: 'n3' }, // 구글 미매칭
+  ];
+  const ledger = {
+    g1: { score: 4.5, count: 120, price: 2, at: '2026-09-18T00:00:00Z' },
+    g2: { score: 4.1, count: 8, at: '2026-09-18T00:00:00Z' },
+  };
+  assert.deepEqual(toAggregate(places, ledger), {
+    n1: { score: 4.5, count: 120, price: 2 },
+    n2: { score: 4.1, count: 8 },
+  });
+});
+
+it('구글 집계: 사라진 곳은 빼고, 점수 없는 곳은 남긴다', () => {
+  // gone 을 남기면 화면이 "평점 없는 가게" 로 그린다. 반대로 점수가 null 인 곳은
+  // 받아는 봤다는 뜻이라 남겨야 "수집 전" 과 구분해 적을 수 있다.
+  const places = [
+    { placeId: 'n1', googlePlaceId: 'g1' },
+    { placeId: 'n2', googlePlaceId: 'g2' },
+  ];
+  const ledger = {
+    g1: { gone: true, at: '2026-09-18T00:00:00Z' },
+    g2: { score: null, count: 0, at: '2026-09-18T00:00:00Z' },
+  };
+  assert.deepEqual(toAggregate(places, ledger), { n2: { score: null, count: 0 } });
 });
 
 it('카카오: 점수·가격·영업시간·랭킹을 집는다', () => {

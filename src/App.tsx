@@ -15,14 +15,14 @@ import { CategoryBar } from './components/CategoryBar';
 import { ListToolbar } from './components/ListToolbar';
 import { RegionPicker, regionLabelOf } from './components/RegionPicker';
 import { ListPanel, useDesktop, type Snap } from './components/ListPanel';
-import type { Discovered, Place, RatingsMap } from './types';
+import type { Discovered, GoogleRating, Place, RatingsMap } from './types';
 import { loadPlaces, loadRatings } from './lib/data';
 import { buildIndex, parseQuery, searchPlaces } from './lib/search';
-import { computeMeans, rawOf, summarize, type SourceMeans } from './lib/rating';
+import { computeMeans, rawOf, summarize } from './lib/rating';
 import { haversine, distanceM } from './lib/geo';
 import { isOpenNow } from './lib/hours';
 import { discoverNearby, geocodePlace } from './lib/kakao';
-import { GOOGLE_ENABLED, RATINGS_API, fetchRatings } from './lib/worker';
+import { GOOGLE_ENABLED, RATINGS_API, fetchGoogleAll, fetchRatings } from './lib/worker';
 import { readUrl, writeUrl, type SortKey } from './lib/url-state';
 import { useVisits } from './lib/visits';
 
@@ -33,7 +33,6 @@ function readColorScheme(): ColorScheme {
   return document.documentElement.getAttribute('data-seed-user-color-scheme') === 'dark' ? 'dark' : 'light';
 }
 
-const DEFAULT_MEANS: SourceMeans = { naver: 4.3, kakao: 3.9, google: 4.2 };
 const EMPTY_REGION = { sido: '', sigungu: '', dong: '' };
 
 interface Near {
@@ -47,8 +46,9 @@ export default function App() {
 
   // ---------- 데이터 ----------
   const [places, setPlaces] = useState<Place[]>([]);
-  const [ratings, setRatings] = useState<RatingsMap>({});
-  const [means, setMeans] = useState<SourceMeans>(DEFAULT_MEANS);
+  const [baseRatings, setBaseRatings] = useState<RatingsMap>({});
+  // 구글은 공개 데이터에 못 넣는다(약관). Worker 가 미리 채워 둔 것을 한 번에 받아 얹는다.
+  const [googleAll, setGoogleAll] = useState<Record<string, GoogleRating> | null>(null);
   const [dataState, setDataState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [ratingsLoading, setRatingsLoading] = useState(true);
 
@@ -119,12 +119,11 @@ export default function App() {
       .catch(() => { if (alive) setDataState('error'); });
 
     loadRatings()
-      .then((r) => {
-        if (!alive) return;
-        setRatings(r);
-        setMeans(computeMeans(r));
-      })
+      .then((r) => { if (alive) setBaseRatings(r); })
       .finally(() => { if (alive) setRatingsLoading(false); });
+
+    // 실패해도 빈 객체가 온다. 구글 칸이 없다고 앱이 멈출 이유는 없다.
+    fetchGoogleAll().then((g) => { if (alive) setGoogleAll(g); });
 
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -152,6 +151,23 @@ export default function App() {
   useEffect(() => {
     if (near) setFocus({ lat: near.lat, lng: near.lng, radius, key: Date.now() });
   }, [near, radius]);
+
+  // 목록용 구글 값을 평점 맵에 얹는다. 상세를 열어 받은 값이 이미 있으면 그쪽이 최신이다.
+  const ratings = useMemo(() => {
+    if (!googleAll || !Object.keys(googleAll).length) return baseRatings;
+    const next: RatingsMap = { ...baseRatings };
+    for (const [sid, g] of Object.entries(googleAll)) {
+      next[sid] = { ...next[sid], google: next[sid]?.google ?? g };
+    }
+    return next;
+  }, [baseRatings, googleAll]);
+
+  // 소스별 전체 평균. 구글이 얹히면 값이 달라지므로 맵이 바뀔 때마다 다시 센다.
+  const means = useMemo(() => computeMeans(ratings), [ratings]);
+
+  // 구글 칸을 목록에 세울지. 데이터가 실제로 왔을 때만 세운다 —
+  // 늘 비는 칸을 세워 두면 카드 가로의 1/3 이 빈칸으로 남는다(그래서 한 번 걷어냈다).
+  const googleReady = Boolean(googleAll && Object.keys(googleAll).length);
 
   // ---------- 검색 ----------
   const index = useMemo(() => buildIndex(places), [places]);
@@ -249,7 +265,7 @@ export default function App() {
     fetchRatings({ g: detailPlace.googlePlaceId })
       .then((r) => {
         if (!r.google) return;
-        setRatings((prev) => ({ ...prev, [sid]: { ...prev[sid], google: r.google } }));
+        setBaseRatings((prev) => ({ ...prev, [sid]: { ...prev[sid], google: r.google } }));
       })
       // 구글 칸은 이미 "수집 전" 으로 보인다. 실패분은 캐시에 남지 않으니 다시 열면 재시도된다.
       .catch(() => {});
@@ -445,6 +461,7 @@ export default function App() {
             places={places}
             ratings={ratings}
             means={means}
+            showGoogle={googleReady}
             selectedCategories={categories}
             selectedPlace={selectedPlace}
             onSelect={handleSelect}
@@ -583,6 +600,7 @@ export default function App() {
                 places={filtered}
                 ratings={ratings}
                 means={means}
+                showGoogle={googleReady}
                 ratingsLoading={ratingsLoading}
                 selectedPlaceId={selectedPlace?.placeId ?? null}
                 onSelect={handleSelect}

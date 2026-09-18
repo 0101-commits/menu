@@ -23,6 +23,8 @@ interface Props {
   onSelect: (p: Place) => void;
   onDetail: (p: Place) => void;
   means: SourceMeans;
+  /** 구글 칸을 세울지 (목록용 구글 데이터가 실제로 왔을 때만) */
+  showGoogle: boolean;
   ratingsLoading: boolean;
   visited: boolean;
 }
@@ -36,7 +38,7 @@ const STATE_CLASS: Record<string, string> = {
 };
 
 export function PlaceCard({
-  place, ratings, distanceKm, selected, onSelect, onDetail, means, ratingsLoading, visited,
+  place, ratings, distanceKm, selected, onSelect, onDetail, means, showGoogle, ratingsLoading, visited,
 }: Props) {
   const status = openStatus(ratings?.hours, undefined, ratings?.hoursDay);
   const price = formatPrice(ratings?.kakao?.price);
@@ -115,7 +117,7 @@ export function PlaceCard({
       </button>
 
       <div className="px-4 pb-3 pt-1.5 border-t border-line-subtle mt-1">
-        <RatingRow place={place} ratings={ratings} loading={ratingsLoading} />
+        <RatingRow place={place} ratings={ratings} showGoogle={showGoogle} loading={ratingsLoading} />
 
         <div className="mt-2 flex items-center justify-between gap-2">
           <p className="text-xs text-fg-subtle m-0 min-w-0 truncate">

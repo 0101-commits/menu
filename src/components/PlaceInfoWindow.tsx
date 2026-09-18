@@ -14,11 +14,12 @@ interface Props {
   place: Place;
   ratings?: Ratings;
   means: SourceMeans;
+  showGoogle: boolean;
   onClose: () => void;
   onDetail: (p: Place) => void;
 }
 
-export function PlaceInfoWindow({ place, ratings, means, onClose, onDetail }: Props) {
+export function PlaceInfoWindow({ place, ratings, means, showGoogle, onClose, onDetail }: Props) {
   const status = openStatus(ratings?.hours, undefined, ratings?.hoursDay);
   const sum = summarize(ratings, means);
 
@@ -49,7 +50,7 @@ export function PlaceInfoWindow({ place, ratings, means, onClose, onDetail }: Pr
       </div>
 
       <div className="mt-2.5 pt-2.5 border-t border-line-subtle">
-        <RatingRow place={place} ratings={ratings} />
+        <RatingRow place={place} ratings={ratings} showGoogle={showGoogle} />
       </div>
 
       <button
