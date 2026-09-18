@@ -38,7 +38,7 @@ const STATE_CLASS: Record<string, string> = {
 export function PlaceCard({
   place, ratings, distanceKm, selected, onSelect, onDetail, means, ratingsLoading, visited,
 }: Props) {
-  const status = openStatus(ratings?.kakao?.hours, undefined, ratings?.kakao?.hoursDay);
+  const status = openStatus(ratings?.hours, undefined, ratings?.hoursDay);
   const price = formatPrice(ratings?.kakao?.price);
   const sum = summarize(ratings, means);
   const rank = rankLabel(ratings?.kakao?.rank);

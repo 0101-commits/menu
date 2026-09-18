@@ -46,14 +46,6 @@ export interface KakaoRating {
   blogs: number;
   /** ₩ 개수. 1~4 */
   price?: number;
-  /** 수집일부터 7일. "14:00 ~ 24:00" 형태, 휴무는 빈 문자열 */
-  hours?: string[];
-  /**
-   * hours[0] 이 무슨 요일인지(0=일). 카카오는 "오늘부터 7일" 을 주는데 그 "오늘" 은
-   * 수집한 날이다. 보는 날과 며칠 어긋났는지 알아야 요일을 맞게 읽는다.
-   */
-  hoursDay?: number;
-  menus?: { name: string; price: number }[];
   rank?: { text: string; n?: number };
   closed?: boolean;
   photos?: number;
@@ -70,6 +62,21 @@ export interface Ratings {
   naver?: NaverRating;
   kakao?: KakaoRating;
   google?: GoogleRating;
+
+  // 아래 셋은 소스를 가리지 않는다. 카카오가 있으면 카카오 값을, 없으면 네이버 값을 쓴다.
+  // 카카오에 안 붙은 가게가 203곳, 붙었는데 영업시간이 비는 곳이 648곳이라
+  // "카카오의 영업시간" 으로 두면 다섯 곳 중 한 곳은 영원히 빈칸이었다.
+
+  /** 오늘부터 7일. "11:30~23:00" 형태, 휴무는 빈 문자열 */
+  hours?: string[];
+  /**
+   * hours[0] 이 무슨 요일인지(0=일). 두 소스 모두 "오늘부터 7일" 을 주는데 그 "오늘" 은
+   * 수집한 날이다. 보는 날과 며칠 어긋났는지 알아야 요일을 맞게 읽는다.
+   */
+  hoursDay?: number;
+  /** 대표 메뉴 3개까지. 네이버 쪽은 가격이 없는 메뉴가 있다. */
+  menus?: { name: string; price?: number }[];
+
   /** 네이버 페이지가 사라졌거나 카카오 영업상태가 Y 가 아니다. 폐업 의심. */
   closed?: boolean;
 }

@@ -19,7 +19,7 @@ interface Props {
 }
 
 export function PlaceInfoWindow({ place, ratings, means, onClose, onDetail }: Props) {
-  const status = openStatus(ratings?.kakao?.hours, undefined, ratings?.kakao?.hoursDay);
+  const status = openStatus(ratings?.hours, undefined, ratings?.hoursDay);
   const sum = summarize(ratings, means);
 
   return (

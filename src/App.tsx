@@ -267,7 +267,7 @@ export default function App() {
   const distanceOrigin = useMemo(() => origin ?? mapCenter, [origin, mapCenter]);
 
   // 평점 기반 필터를 걸 수 있는 상태인지. 카카오 매칭 전에는 영업시간이 아예 없다.
-  const hasHours = useMemo(() => Object.values(ratings).some((r) => r.kakao?.hours?.length), [ratings]);
+  const hasHours = useMemo(() => Object.values(ratings).some((r) => r.hours?.length), [ratings]);
   const hasScores = useMemo(
     () => Object.values(ratings).some((r) => rawOf(r, 'naver') || rawOf(r, 'kakao') || rawOf(r, 'google')),
     [ratings],
@@ -294,8 +294,8 @@ export default function App() {
     if (openOnly && hasHours) {
       const now = new Date();
       list = list.filter((p) => {
-        const k = ratings[p.placeId]?.kakao;
-        return isOpenNow(k?.hours, now, k?.hoursDay);
+        const r = ratings[p.placeId];
+        return isOpenNow(r?.hours, now, r?.hoursDay);
       });
     }
     if (minScore != null && hasScores) {

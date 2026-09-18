@@ -43,7 +43,7 @@ export function PlaceSheet({
   const k = ratings?.kakao;
   const n = ratings?.naver;
   const sum = summarize(ratings, means);
-  const status = openStatus(k?.hours, undefined, k?.hoursDay);
+  const status = openStatus(ratings?.hours, undefined, ratings?.hoursDay);
   const price = formatPrice(k?.price);
   const rank = rankLabel(k?.rank);
 
@@ -53,8 +53,8 @@ export function PlaceSheet({
   // 배열의 0번은 오늘이 아니라 수집한 날이다. 요일 이름은 수집 요일부터 붙이고,
   // 굵게 표시할 "오늘" 은 며칠 어긋났는지 계산해 찾는다.
   const now = new Date();
-  const baseDay = k?.hoursDay ?? seoulDay(now);
-  const todayCell = todayIndex(k?.hoursDay, now);
+  const baseDay = ratings?.hoursDay ?? seoulDay(now);
+  const todayCell = todayIndex(ratings?.hoursDay, now);
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -144,13 +144,13 @@ export function PlaceSheet({
           )}
         </div>
 
-        {k?.hours?.length ? (
+        {ratings?.hours?.length ? (
           <Section icon={<Clock className="w-3.5 h-3.5" />} title="영업시간">
             {status.text && (
               <p className="m-0 mb-1.5 text-sm font-medium text-fg">{status.text}</p>
             )}
             <ul className="m-0 p-0 list-none grid gap-0.5">
-              {k.hours.map((h, i) => (
+              {ratings.hours.map((h, i) => (
                 <li key={i} className="flex gap-3 text-xs">
                   <span className={`w-6 shrink-0 ${i === todayCell ? 'font-bold text-fg' : 'text-fg-muted'}`}>
                     {DAYS[(baseDay + i) % 7]}
@@ -164,10 +164,10 @@ export function PlaceSheet({
           </Section>
         ) : null}
 
-        {k?.menus?.length ? (
+        {ratings?.menus?.length ? (
           <Section icon={<UtensilsCrossed className="w-3.5 h-3.5" />} title="대표 메뉴">
             <ul className="m-0 p-0 list-none grid gap-1">
-              {k.menus.map((m, i) => (
+              {ratings.menus.map((m, i) => (
                 <li key={i} className="flex items-baseline justify-between gap-3 text-sm">
                   <span className="text-fg truncate">{m.name}</span>
                   <span className="text-fg-muted tabular-nums shrink-0">
