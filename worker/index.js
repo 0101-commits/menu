@@ -79,10 +79,21 @@ async function collect(env, { n, k, g }) {
   if (g && env.GOOGLE_PLACES_KEY) {
     jobs.push(
       (async () => {
-        // 구글만 돈이 든다. 기본 하루 30 건이면 무료 한도(월 1,000)를 넘지 않는다.
+        // 미리 채워 둔 값이 있으면 API 를 안 부른다. 채우는 건 scripts/google-fill.mjs 가
+        // 하고 wrangler kv bulk put 으로 올린다. 이 키에는 TTL 이 없다 — 있으면 한 달마다
+        // 3,613건을 다시 받아야 하고 그게 곧 요금이다.
+        const seeded = await env.RATINGS.get(`g:${g}`, 'json');
+        if (seeded && !seeded.gone) { out.google = seeded; return; }
+        if (seeded?.gone) return; // 사라진 장소. 다시 묻지 않는다.
+
+        // 채워지지 않은 곳(새로 늘어난 가게 등)만 그때그때 받는다.
+        // 기본 하루 30 건이면 무료 한도(월 1,000)를 넘지 않는다.
         if (await overQuota(env, 'google', Number(env.DAILY_GOOGLE_LIMIT ?? 30))) return;
         const r = await fetchGoogle(g, env.GOOGLE_PLACES_KEY).catch(() => null);
-        if (r && !r.gone) out.google = r;
+        if (!r || r.gone) return;
+        out.google = r;
+        // 받은 김에 같은 자리에 남긴다. 다음부터는 호출이 안 나간다.
+        await env.RATINGS.put(`g:${g}`, JSON.stringify({ ...r, at: new Date().toISOString() }));
       })(),
     );
   }

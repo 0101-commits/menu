@@ -1,0 +1,117 @@
+name: 구글 평점 갱신
+
+# 구글 평점을 무료 한도 안에서만 굴린다.
+#
+# 매달 1,000건씩 오래된 것부터 받아 Worker KV 에 올린다. 구글 place ID 가 3,613곳이므로
+# 약 4개월에 한 바퀴를 돈다. Place Details Enterprise SKU 는 월 1,000건이 무료이고
+# 그 뒤로 1,000건당 $20 인데, 여기서는 --limit=1000 이라 유료 구간에 들어갈 수가 없다
+# (google-fill.mjs 가 무료 한도를 넘으면 --yes 없이 멈춘다).
+#
+# 값은 공개 레포에 넣지 않는다. 구글 약관은 Places API 에서 위경도만 캐시를 허용하고
+# 평점은 목록에 없다 — 그래서 커밋 대신 비공개인 Worker KV 로만 보낸다.
+#
+# 처음 전량을 채우는 방법은 둘이다. 둘 다 유료 구간이라 확인을 한 번 받는다.
+#   손으로:   GOOGLE_PLACES_KEY=... node scripts/google-fill.mjs --all --yes
+#             cd worker && npx wrangler kv bulk put ../raw/google-kv.json --binding RATINGS --remote
+#   여기서:   Run workflow > limit=4000 · confirm_paid 체크 (CF 토큰이 레포 시크릿에 있어야 한다)
+
+on:
+  schedule:
+    # 매월 1일 05:00 KST. 보강 워크플로(04:00)와 겹치지 않게 한 시간 뒤에 둔다.
+    - cron: '0 20 1 * *'
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: '이번에 받을 건수. 무료 한도가 월 1,000건이라 그 위로는 올리지 않는다'
+        required: false
+        default: '1000'
+      older_than:
+        description: '며칠 지난 것을 갱신 대상으로 볼지'
+        required: false
+        default: '120'
+      confirm_paid:
+        description: '무료 한도를 넘는 건수를 받겠다고 확인한다 (첫 전량 채움용, 1,000건 초과분은 1,000건당 $20)'
+        type: boolean
+        required: false
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: google-refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      # 자격증명이 없으면 시작도 하지 않는다. 받아 놓고 못 올리면 그만큼이 헛돈이고,
+      # 여기 원장(raw/google.json)과 손으로 돌린 원장이 갈라지면 같은 곳에 두 번 과금된다.
+      - name: 자격증명 확인
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          GOOGLE_KEY: ${{ secrets.GOOGLE_PLACES_KEY }}
+        run: |
+          missing=''
+          [ -n "$GOOGLE_KEY" ] || missing="$missing GOOGLE_PLACES_KEY"
+          [ -n "$CF_TOKEN" ] || missing="$missing CLOUDFLARE_API_TOKEN"
+          [ -n "$CF_ACCOUNT" ] || missing="$missing CLOUDFLARE_ACCOUNT_ID"
+          if [ -n "$missing" ]; then
+            echo "레포 시크릿이 없습니다:$missing" >> "$GITHUB_STEP_SUMMARY"
+            echo '토큰을 넣지 않겠다면 이 워크플로를 끄고 손으로 돌리세요 — 방법은 파일 머리말에 있습니다.' >> "$GITHUB_STEP_SUMMARY"
+            echo "레포 시크릿이 없습니다:$missing"
+            exit 1
+          fi
+
+      # 원장. 이게 없으면 이미 받은 곳을 다시 받는다 — 그게 곧 요금이다.
+      - name: 원장 복원
+        uses: actions/cache/restore@v4
+        with:
+          path: raw
+          key: google-ledger-${{ github.run_id }}
+          restore-keys: google-ledger-
+
+      - name: 수집
+        env:
+          GOOGLE_PLACES_KEY: ${{ secrets.GOOGLE_PLACES_KEY }}
+        run: node scripts/google-fill.mjs --limit=${{ inputs.limit || '1000' }} --older-than=${{ inputs.older_than || '120' }} ${{ inputs.confirm_paid && '--yes' || '' }}
+
+      # 원장은 받은 직후에 저장한다. 업로드가 실패해도 이미 쓴 돈은 기록에 남아야 한다.
+      - name: 원장 저장
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: raw
+          key: google-ledger-${{ github.run_id }}
+
+      - name: KV 업로드
+        working-directory: worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ ! -f ../raw/google-kv.json ]; then
+            echo '올릴 것이 없습니다.' >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          npx wrangler kv bulk put ../raw/google-kv.json --binding RATINGS --remote
+
+      - name: 요약
+        if: always()
+        run: |
+          echo '## 구글 평점 갱신' >> "$GITHUB_STEP_SUMMARY"
+          if [ -f raw/google.json ]; then
+            node -e "const l=require('./raw/google.json');const v=Object.values(l);console.log('- 원장 '+v.length+'건 (없어진 곳 '+v.filter(x=>x.gone).length+'건)')" >> "$GITHUB_STEP_SUMMARY"
+          fi

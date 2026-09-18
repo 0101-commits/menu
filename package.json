@@ -15,7 +15,8 @@
     "ratings": "node scripts/ratings.mjs",
     "build:data": "node scripts/build-places.mjs --from-existing && node scripts/build-ratings.mjs",
     "sync": "npm run sync:fetch && npm run sync:enrich && npm run match && node scripts/build-places.mjs && npm run ratings && node scripts/build-ratings.mjs && npm run test && npm run typecheck",
-    "test": "node scripts/selftest.mjs"
+    "test": "node scripts/selftest.mjs",
+    "google:fill": "node scripts/google-fill.mjs"
   },
   "dependencies": {
     "@seed-design/css": "^2.8.0",
