@@ -321,6 +321,68 @@ it('네이버: 다른 장소의 점수를 집지 않는다', () => {
   assert.equal(parseNaver(html, '123').score, 4.53);
 });
 
+it('네이버: 영업시간을 카카오와 같은 형식으로 집는다', () => {
+  // 실측 구조. newBusinessHours[0].businessHours 가 오늘부터 7일이고 요일 이름이 값에 들어 있다.
+  // 마지막 날처럼 "목(9/24)" 로 날짜가 붙기도 해서 첫 글자만 본다.
+  const day = (d, start, end) =>
+    `{"__typename":"WorkingHoursInfo","day":"${d}",` +
+    (start
+      ? `"businessHours":{"__typename":"StartEndTime","start":"${start}","end":"${end}"},"breakHours":null}`
+      : '"businessHours":null,"breakHours":null}');
+  const html =
+    '{"PlaceDetailBase:123":{"visitorReviewsTotal":10,"visitorReviewsScore":4.1}}' +
+    '"businessHours":[' +
+    [
+      day('금', '11:30', '23:00'),
+      day('토', '11:30', '23:00'),
+      day('일', null),
+      day('월', '11:30', '23:00'),
+      day('화', '11:30', '23:00'),
+      day('수', '11:30', '23:00'),
+      day('목(9/24)', '11:30', '23:30'),
+    ].join(',') +
+    ']';
+  const r = parseNaver(html, '123');
+  assert.equal(r.hoursDay, 5); // 금
+  assert.equal(r.hours.length, 7);
+  assert.equal(r.hours[0], '11:30~23:00');
+  assert.equal(r.hours[2], ''); // 휴무는 빈 문자열 — 카카오 규약과 같다
+  assert.equal(r.hours[6], '11:30~23:30');
+});
+
+it('네이버: 영업시간이 아예 없으면 필드를 만들지 않는다', () => {
+  // 빈 배열을 넣으면 화면이 "영업시간" 절을 빈 채로 그린다. 없으면 없는 것이다.
+  const html = '{"PlaceDetailBase:123":{"visitorReviewsTotal":10,"visitorReviewsScore":4.1}}';
+  const r = parseNaver(html, '123');
+  assert.equal(r.hours, undefined);
+  assert.equal(r.hoursDay, undefined);
+});
+
+it('네이버: 대표 메뉴는 repr 배지가 붙은 것을 먼저 쓴다', () => {
+  // 가격은 "5,500원" 같은 표시 문자열로 온다. 숫자만 남긴다.
+  const item = (name, price, repr) =>
+    `{"__typename":"PlaceMenuItem","id":"x","type":"normal","name":"${name}",` +
+    `"badges":[${repr ? '"repr"' : ''}],` +
+    `"price":{"__typename":"PlaceMenuPrice","priceType":"fixed","displayText":"${price}"}}`;
+  const html =
+    '{"PlaceDetailBase:123":{"visitorReviewsTotal":10,"visitorReviewsScore":4.1}}' +
+    [item('사이드', '2,000원', false), item('떡볶이', '5,500원', true), item('왕김말이', '2,000원', true)].join(',');
+  const r = parseNaver(html, '123');
+  assert.deepEqual(r.menus, [
+    { name: '떡볶이', price: 5500 },
+    { name: '왕김말이', price: 2000 },
+  ]);
+});
+
+it('네이버: 가격 없는 메뉴도 버리지 않는다', () => {
+  // 가격을 안 적은 업주가 있다. 이름만이라도 보여 주는 편이 낫다.
+  const html =
+    '{"PlaceDetailBase:123":{"visitorReviewsTotal":10,"visitorReviewsScore":4.1}}' +
+    '{"__typename":"PlaceMenuItem","id":"x","name":"오늘의 파스타","badges":["repr"],' +
+    '"price":{"__typename":"PlaceMenuPrice","priceType":"changing","displayText":"변동"}}';
+  assert.deepEqual(parseNaver(html, '123').menus, [{ name: '오늘의 파스타' }]);
+});
+
 it('네이버: 사라진 장소는 폐업으로 분류한다', () => {
   // placeDetail 이 null 인 페이지가 HTTP 200 으로 온다. 파싱 실패로 세면 게이트가 오작동한다.
   const html = '__APOLLO_STATE__ = {"ROOT_QUERY":{"placeDetail({\\"input\\":{\\"id\\":\\"123\\"}})":null}}';

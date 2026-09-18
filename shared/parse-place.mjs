@@ -14,6 +14,74 @@ export const KAKAO_UA =
 
 // ---------- 네이버 ----------
 
+const DAY_NAMES = ['일', '월', '화', '수', '목', '금', '토'];
+
+/**
+ * 네이버 영업시간. `newBusinessHours[0].businessHours` 가 오늘부터 7일치로 온다.
+ *
+ * 카카오와 **같은 형식**(문자열 7개 + 기준 요일)으로 맞춘다. 화면은 어느 소스에서 왔는지
+ * 몰라도 되게 하는 편이 낫다 — 카카오에 안 붙은 가게가 851곳이고, 그 자리를 이걸로 메운다.
+ *
+ * 요일 이름이 값 안에 들어 있어 기준 요일을 따로 추측할 필요가 없다("목(9/24)" 처럼
+ * 날짜가 붙기도 해서 첫 글자만 본다). 영업하지 않는 날은 빈 문자열이다 — 카카오 규약과 같다.
+ */
+function parseNaverHours(html) {
+  const anchor = html.indexOf('"businessHours":[{"__typename":"WorkingHoursInfo"');
+  if (anchor < 0) return null;
+
+  const win = html.slice(anchor, anchor + 6000);
+  const days = win.split('{"__typename":"WorkingHoursInfo"').slice(1, 8);
+  if (!days.length) return null;
+
+  const hours = [];
+  let baseDay = null;
+
+  for (const seg of days) {
+    const dayName = (seg.match(/"day":"(.)/) ?? [])[1];
+    if (baseDay === null && dayName) {
+      const i = DAY_NAMES.indexOf(dayName);
+      if (i >= 0) baseDay = i;
+    }
+
+    const span = seg.match(/"businessHours":\{"__typename":"StartEndTime","start":"([^"]*)","end":"([^"]*)"/);
+    if (!span) { hours.push(''); continue; }
+
+    // 브레이크 타임이 있으면 같이 적는다. 없는 가게가 대부분이라 있을 때만 붙인다.
+    const brk = seg.match(/"breakHours":\[\{"__typename":"StartEndTime","start":"([^"]*)","end":"([^"]*)"/);
+    hours.push(brk ? `${span[1]}~${span[2]} (브레이크 ${brk[1]}~${brk[2]})` : `${span[1]}~${span[2]}`);
+  }
+
+  if (baseDay === null || !hours.some((h) => h)) return null;
+  return { hours, hoursDay: baseDay };
+}
+
+/**
+ * 네이버 대표 메뉴. 가격은 "5,500원" 같은 표시 문자열로 와서 숫자만 뽑는다.
+ * badges 에 "repr" 이 붙은 것이 업주가 고른 대표 메뉴다. 없으면 앞에서 채운다.
+ */
+function parseNaverMenus(html) {
+  const items = [];
+  for (const seg of html.split('"__typename":"PlaceMenuItem"').slice(1)) {
+    const head = seg.slice(0, 900);
+    const name = (head.match(/"name":"([^"]+)"/) ?? [])[1];
+    if (!name) continue;
+    const priceText = (head.match(/"displayText":"([^"]*)"/) ?? [])[1] ?? '';
+    const digits = priceText.replace(/[^\d]/g, '');
+    items.push({
+      name,
+      ...(digits ? { price: Number(digits) } : {}),
+      repr: /"badges":\[[^\]]*"repr"/.test(head),
+    });
+  }
+  if (!items.length) return null;
+
+  const repr = items.filter((m) => m.repr);
+  return (repr.length ? repr : items).slice(0, 3).map(({ name, price }) => ({
+    name,
+    ...(price ? { price } : {}),
+  }));
+}
+
 export function parseNaver(html, sid) {
   // 즐겨찾기에는 남아 있지만 네이버 플레이스에서 사라진 장소가 있다.
   // 이때 페이지는 HTTP 200 으로 오고 Apollo 상태의 placeDetail 만 null 이다.
@@ -58,7 +126,13 @@ export function parseNaver(html, sid) {
   // 앵커도 못 찾고 점수 필드도 없으면 파싱이 어긋난 것이다. 0 점으로 저장하면 안 된다.
   if (anchor < 0 && score === undefined && visitors === undefined) return { parseError: true };
 
+  // 영업시간·메뉴는 같은 HTML 에 이미 들어 있다. 추가 호출이 0 이므로 항상 뽑는다.
+  const hours = parseNaverHours(html);
+  const menus = parseNaverMenus(html);
+
   return {
+    ...(hours ? hours : {}),
+    ...(menus ? { menus } : {}),
     // 0 은 실제 평점이 아니라 "점수 없음" 이다. 방문자 리뷰가 288 개인데 평균이 정확히 0 인
     // 가게가 실측 55 건 나왔고, 0 초과 3 미만은 6 건뿐이었다. 0.0 으로 보여 주면
     // 평점순 바닥에 깔리고 카드에는 거짓말이 찍힌다.
