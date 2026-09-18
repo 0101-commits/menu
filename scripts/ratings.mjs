@@ -26,7 +26,10 @@ import { fetchNaver, fetchKakao } from '../shared/parse-place.mjs';
 const OUT = 'raw/ratings.json';
 const A = args();
 const SOURCE = A.source ?? 'both';
-const DELAY = Number(A.delay ?? 1100);
+// 소스마다 견디는 간격이 다르다. 카카오는 공식 API 에 가까워 700ms 로도 안 막히지만
+// 네이버는 비공식 경로라 1.1초 밑으로 내리면 400/429 가 쏟아진다. --delay 를 주면 그 값이 이긴다.
+const DEFAULT_DELAY = SOURCE === 'kakao' ? 700 : 1100;
+const DELAY = Number(A.delay ?? DEFAULT_DELAY);
 const MAX_RETRY = 4;
 const REFRESH_DAYS = A.force ? 0 : Number(A.refresh ?? 30);
 
