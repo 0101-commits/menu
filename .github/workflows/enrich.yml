@@ -40,6 +40,12 @@ on:
         type: boolean
         required: false
         default: false
+      match_source:
+        description: '매칭할 소스. 구글 Text Search 는 건당 요금이라 재시도할 때는 kakao 로 좁힌다'
+        type: choice
+        required: false
+        default: both
+        options: [both, kakao]
       debug:
         description: '떨어진 후보를 로그에 찍는다 (원인 진단용)'
         type: boolean
@@ -99,7 +105,7 @@ jobs:
         env:
           KAKAO_REST_KEY: ${{ secrets.KAKAO_REST_KEY }}
           GOOGLE_PLACES_KEY: ${{ secrets.GOOGLE_PLACES_KEY }}
-        run: node scripts/match.mjs ${{ inputs.limit && format('--limit={0}', inputs.limit) || '' }} ${{ inputs.retry_miss && '--retry-miss' || '' }} ${{ inputs.debug && '--debug' || '' }}
+        run: node scripts/match.mjs ${{ inputs.match_source == 'kakao' && '--source=kakao' || '' }} ${{ inputs.limit && format('--limit={0}', inputs.limit) || '' }} ${{ inputs.retry_miss && '--retry-miss' || '' }} ${{ inputs.debug && '--debug' || '' }}
 
       # 매칭 결과를 places.json 에 반영한다(kakaoId 필드).
       - name: places.json 갱신 + 게이트
