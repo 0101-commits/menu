@@ -29,3 +29,6 @@ reports/
 
 # OMC 운영 산출물
 .omc/
+
+# tsc -b 산출물
+*.tsbuildinfo

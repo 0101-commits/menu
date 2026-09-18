@@ -111,8 +111,16 @@ export function parseKakao(j) {
     ...(sym ? { price: sym.length } : {}), // ₩₩₩₩ → 4
     ...(hours ? { hours } : {}),
     ...(menus.length ? { menus } : {}),
-    ...(j?.trend_rank?.show_ranking_card
-      ? { rank: { text: j.trend_rank.display_text, n: j.trend_rank.menu_rank?.rank } }
+    // show_ranking_card 만 보고 만들면 문구도 순위도 없는 빈 rank 가 남아 화면에 글자 없는
+    // 알약이 찍힌다. 보여 줄 말이 하나라도 있을 때만 만든다.
+    ...(j?.trend_rank?.show_ranking_card &&
+    (j.trend_rank.display_text?.trim() || j.trend_rank.menu_rank?.rank)
+      ? {
+          rank: {
+            text: j.trend_rank.display_text?.trim() ?? '',
+            ...(j.trend_rank.menu_rank?.rank ? { n: j.trend_rank.menu_rank.rank } : {}),
+          },
+        }
       : {}),
     ...(status && status !== 'Y' ? { closed: true } : {}),
     ...(regions[1] ? { region: [regions[1], regions[2], regions[3]].filter(Boolean) } : {}),

@@ -29,9 +29,9 @@ export function DiscoveredWindow({ item, ratings, loading, unavailable, failed, 
         <div className="min-w-0">
           <div className="flex items-center gap-1.5">
             <Bookmark className="w-3 h-3 shrink-0 text-fg-subtle" aria-hidden="true" />
-            <h3 className="font-bold text-[15px] text-fg m-0 truncate">{item.name}</h3>
+            <h3 className="font-bold text-base text-fg m-0 truncate">{item.name}</h3>
           </div>
-          <p className="m-0 mt-0.5 text-[11px] text-fg-subtle truncate">
+          <p className="m-0 mt-0.5 text-xs text-fg-subtle truncate">
             저장 안 함{item.category ? ` · ${item.category}` : ''}
           </p>
         </div>
@@ -49,14 +49,14 @@ export function DiscoveredWindow({ item, ratings, loading, unavailable, failed, 
 
       <div className="mt-2.5 pt-2.5 border-t border-line-subtle">
         {unavailable ? (
-          <p className="m-0 text-[11px] text-fg-subtle">평점 조회가 설정되지 않았습니다</p>
+          <p className="m-0 text-xs text-fg-subtle">평점 조회가 설정되지 않았습니다</p>
         ) : failed ? (
           <div className="flex items-center justify-between gap-2">
-            <p className="m-0 text-[11px] text-[var(--matpin-closing)]">평점을 못 받아왔습니다</p>
+            <p className="m-0 text-xs text-[var(--matpin-closing)]">평점을 못 받아왔습니다</p>
             <button
               type="button"
               onClick={onRetry}
-              className="shrink-0 inline-flex items-center gap-1 min-h-9 px-2 rounded-lg text-[11px] font-medium text-fg-muted hover:bg-surface-pressed focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+              className="shrink-0 inline-flex items-center gap-1 min-h-9 px-2 rounded-lg text-xs font-medium text-fg-muted hover:bg-surface-pressed focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
             >
               <RotateCw className="w-3 h-3" aria-hidden="true" />
               다시 시도

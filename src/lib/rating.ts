@@ -69,9 +69,13 @@ export function computeMeans(map: RatingsMap): SourceMeans {
   return { naver: mean('naver'), kakao: mean('kakao'), google: mean('google') };
 }
 
+export const SOURCE_LABEL: Record<SourceKey, string> = { naver: '네이버', kakao: '카카오', google: '구글' };
+
 export interface RatingSummary {
   /** 정렬·필터에 쓰는 보정 평균. 점수가 있는 소스가 하나도 없으면 null. */
   combined: number | null;
+  /** 점수가 한 소스에서만 나왔으면 그 소스. 둘 이상이면 undefined. */
+  only?: SourceKey;
   /** 소스 2개 이상이고 표본 합이 100 이상이면 high */
   confidence: 'high' | 'low';
   sourceCount: number;
@@ -91,6 +95,7 @@ export function summarize(r: Ratings | undefined, means: SourceMeans = DEFAULT_M
 
   const adjusted: number[] = [];
   const rawScores: number[] = [];
+  const used: SourceKey[] = [];
   let totalReviews = 0;
   let smallSample: SourceKey | null = null;
 
@@ -100,6 +105,7 @@ export function summarize(r: Ratings | undefined, means: SourceMeans = DEFAULT_M
     const m = PRIOR[key];
     adjusted.push((raw.n * raw.score + m * means[key]) / (raw.n + m));
     rawScores.push(raw.score);
+    used.push(key);
     totalReviews += raw.n;
     if (raw.n < 20 && smallSample === null) smallSample = key;
   }
@@ -111,15 +117,44 @@ export function summarize(r: Ratings | undefined, means: SourceMeans = DEFAULT_M
   const confidence: 'high' | 'low' =
     adjusted.length >= 2 && totalReviews >= 100 ? 'high' : 'low';
 
-  const LABEL: Record<SourceKey, string> = { naver: '네이버', kakao: '카카오', google: '구글' };
   const caution =
     spread !== null && spread >= 0.8
       ? '소스마다 평가가 갈립니다'
       : smallSample
-        ? `${LABEL[smallSample]} 표본이 적습니다`
+        ? `${SOURCE_LABEL[smallSample]} 표본이 적습니다`
         : undefined;
 
-  return { combined, confidence, sourceCount: adjusted.length, totalReviews, spread, ...(caution ? { caution } : {}) };
+  return {
+    combined,
+    confidence,
+    sourceCount: adjusted.length,
+    totalReviews,
+    spread,
+    ...(used.length === 1 ? { only: used[0] } : {}),
+    ...(caution ? { caution } : {}),
+  };
+}
+
+/**
+ * 점수 앞에 붙일 말. 한 소스에서만 나온 점수를 "통합" 이라 부르면 여러 곳을 합친 값으로 읽힌다.
+ * 실제로 목록의 대부분이 네이버 하나짜리다.
+ */
+export function scoreLabel(sum: RatingSummary): string {
+  return sum.only ? SOURCE_LABEL[sum.only] : '통합';
+}
+
+/**
+ * 카카오 랭킹 배지에 쓸 문구. 없으면 null.
+ *
+ * rank 객체는 있는데 text 가 빈 문자열인 가게가 많다(수집 시점에 노출 카드만 있고 문구가 없던 경우).
+ * 그대로 그리면 글자 없는 알약이 남는다 — 실측으로 목록 161곳 중 67곳이 그랬다.
+ */
+export function rankLabel(rank: { text: string; n?: number } | undefined): string | null {
+  if (!rank) return null;
+  const text = rank.text?.trim() ?? '';
+  const n = rank.n ? `${rank.n}위` : '';
+  const label = [text, n].filter(Boolean).join(' ');
+  return label || null;
 }
 
 /** 점수 표기. 소수 한 자리로 맞춰 자릿수가 흔들리지 않게 한다. */

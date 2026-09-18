@@ -13,7 +13,7 @@ import { PlaceList } from './components/PlaceList';
 import { PlaceSheet } from './components/PlaceSheet';
 import { CategoryBar } from './components/CategoryBar';
 import { ListToolbar } from './components/ListToolbar';
-import { RegionPicker } from './components/RegionPicker';
+import { RegionPicker, regionLabelOf } from './components/RegionPicker';
 import { ListPanel, useDesktop, type Snap } from './components/ListPanel';
 import type { Discovered, Place, RatingsMap } from './types';
 import { loadPlaces, loadRatings } from './lib/data';
@@ -60,6 +60,7 @@ export default function App() {
   const [radius, setRadius] = useState(initial.r ?? 500);
   const [scope, setScope] = useState<'map' | 'all'>(initial.all ? 'all' : 'map');
   const [region, setRegion] = useState({ sido: '', sigungu: '', dong: '' });
+  const [regionOpen, setRegionOpen] = useState(false);
   const [openOnly, setOpenOnly] = useState(Boolean(initial.open));
   const [minScore, setMinScore] = useState<number | null>(initial.min ?? null);
   const [unvisitedOnly, setUnvisitedOnly] = useState(false);
@@ -261,6 +262,10 @@ export default function App() {
     [near, selectedPlace],
   );
 
+  // 거리를 "적는" 기준점. 정렬 기준(origin)과 일부러 나눈다 — 지도 중심은 팬할 때마다 바뀌므로
+  // 정렬에 쓰면 손가락을 뗄 때마다 목록 순서가 튄다. 표시에만 쓰면 진입 직후에도 거리가 보인다.
+  const distanceOrigin = useMemo(() => origin ?? mapCenter, [origin, mapCenter]);
+
   // 평점 기반 필터를 걸 수 있는 상태인지. 카카오 매칭 전에는 영업시간이 아예 없다.
   const hasHours = useMemo(() => Object.values(ratings).some((r) => r.kakao?.hours?.length), [ratings]);
   const hasScores = useMemo(
@@ -440,7 +445,6 @@ export default function App() {
             places={places}
             ratings={ratings}
             means={means}
-            googleEnabled={GOOGLE_ENABLED}
             selectedCategories={categories}
             selectedPlace={selectedPlace}
             onSelect={handleSelect}
@@ -531,16 +535,21 @@ export default function App() {
               unvisitedOnly={unvisitedOnly}
               onUnvisitedOnlyChange={setUnvisitedOnly}
               onPickNow={pickNow}
+              regionOpen={regionOpen}
+              onRegionOpenChange={setRegionOpen}
+              regionLabel={regionLabelOf(region)}
               total={places.length}
             />
 
-            <RegionPicker
-              places={places}
-              sido={region.sido}
-              sigungu={region.sigungu}
-              dong={region.dong}
-              onChange={setRegion}
-            />
+            {regionOpen && (
+              <RegionPicker
+                places={places}
+                sido={region.sido}
+                sigungu={region.sigungu}
+                dong={region.dong}
+                onChange={setRegion}
+              />
+            )}
 
             {searchNotice && (
               <p className="shrink-0 m-0 px-3 py-2 text-xs text-[var(--matpin-closing)] bg-surface-fill border-b border-line-subtle">
@@ -574,12 +583,11 @@ export default function App() {
                 places={filtered}
                 ratings={ratings}
                 means={means}
-                googleEnabled={GOOGLE_ENABLED}
                 ratingsLoading={ratingsLoading}
                 selectedPlaceId={selectedPlace?.placeId ?? null}
                 onSelect={handleSelect}
                 onDetail={handleDetail}
-                origin={origin}
+                origin={distanceOrigin}
                 visited={visitedIds}
                 emptyHint={
                   near
@@ -592,7 +600,7 @@ export default function App() {
             )}
 
             {withScore > 0 && !ratingsLoading && (
-              <p className="shrink-0 px-3 py-1.5 m-0 text-[11px] text-fg-subtle border-t border-line-subtle tabular-nums">
+              <p className="shrink-0 px-3 py-1.5 m-0 text-xs text-fg-subtle border-t border-line-subtle tabular-nums">
                 평점 수집 {withScore.toLocaleString()} / {places.length.toLocaleString()}곳
               </p>
             )}

@@ -107,7 +107,6 @@ interface Props {
   places: Place[];
   ratings: RatingsMap;
   means: SourceMeans;
-  googleEnabled: boolean;
   selectedCategories: string[];
   selectedPlace: Place | null;
   onSelect: (p: Place | null) => void;
@@ -125,7 +124,7 @@ interface Props {
 }
 
 export function MapView({
-  places, ratings, means, googleEnabled, selectedCategories, selectedPlace,
+  places, ratings, means, selectedCategories, selectedPlace,
   onSelect, onDetail, onBoundsChange, focus, discovered, discoveredRatings,
   onDiscoveredOpen, discoverFailed, discoverUnavailable, topOffset, onStatusChange,
 }: Props) {
@@ -205,6 +204,33 @@ export function MapView({
           disableClickZoom: false,
           styles: CLUSTER_STYLES,
           calculator: [10, 100],
+        });
+
+        // 클러스터가 색을 지운다.
+        //
+        // 마커를 색군으로 나눠 놓고 칩 바도 같은 색을 쓰는데, 정작 사람들이 가장 오래 보는
+        // 진입 줌에서는 전부 클러스터로 묶여 무채색 동그라미만 남는다. 지도와 칩이 다른 말을 한다.
+        // 그 안에서 가장 많은 색군의 색을 테두리로 돌려준다 — 배경까지 칠하면 가운데 숫자가 죽는다.
+        const colorByMarker = new Map(items.map((i) => [i.marker, colorOf(i.place.category)]));
+        kakao.maps.event.addListener(clustererRef.current, 'clustered', (clusters: any[]) => {
+          for (const cluster of clusters) {
+            // SDK 내부 구조에 기대는 부분이라 하나라도 없으면 조용히 건너뛴다(무채색 그대로).
+            const el = cluster?.getClusterMarker?.()?.getContent?.();
+            if (!el || typeof el !== 'object' || !el.style) continue;
+
+            const tally = new Map<string, number>();
+            for (const m of cluster.getMarkers()) {
+              const c = colorByMarker.get(m);
+              if (c) tally.set(c, (tally.get(c) ?? 0) + 1);
+            }
+            let top: string | null = null;
+            let topN = 0;
+            for (const [c, n] of tally) if (n > topN) { topN = n; top = c; }
+            if (!top) continue;
+
+            el.style.boxSizing = 'border-box';
+            el.style.border = `3px solid ${top}`;
+          }
         });
 
         // 지도 빈 곳 클릭
@@ -313,12 +339,11 @@ export function MapView({
         place={selectedPlace}
         ratings={ratings[selectedPlace.placeId]}
         means={means}
-        googleEnabled={googleEnabled}
         onClose={() => cb.current.onSelect(null)}
         onDetail={onDetail}
       />,
     );
-  }, [selectedPlace, status, ratings, means, googleEnabled, onDetail]);
+  }, [selectedPlace, status, ratings, means, onDetail]);
 
   // ---------- 반경·이동 ----------
   useEffect(() => {

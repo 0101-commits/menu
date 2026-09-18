@@ -9,7 +9,7 @@ import type { Place, Ratings } from '../types';
 import { BrandDot, brandName, type Brand } from './BrandDot';
 import { PlaceLinks } from './PlaceLinks';
 import { colorOf } from '../lib/categories';
-import { formatCount, formatPrice, formatScore, rawOf, summarize, type SourceMeans } from '../lib/rating';
+import { formatCount, formatPrice, formatScore, rankLabel, rawOf, scoreLabel, summarize, type SourceMeans } from '../lib/rating';
 import { openStatus, todayIndex, seoulDay } from '../lib/hours';
 
 interface Props {
@@ -45,6 +45,7 @@ export function PlaceSheet({
   const sum = summarize(ratings, means);
   const status = openStatus(k?.hours, undefined, k?.hoursDay);
   const price = formatPrice(k?.price);
+  const rank = rankLabel(k?.rank);
 
   const rows = (['naver', 'kakao', 'google'] as Brand[]).map((b) => ({ brand: b, raw: rawOf(ratings, b) }));
   const maxN = Math.max(1, ...rows.map((r) => r.raw?.n ?? 0));
@@ -65,8 +66,8 @@ export function PlaceSheet({
           </div>
           <p className="mt-1 m-0 flex flex-wrap items-center gap-x-1.5 text-xs text-fg-muted">
             <span className="bg-surface-fill px-2 py-0.5 rounded-full font-medium">{place.category}</span>
-            {place.mcidName && <span>{place.mcidName}</span>}
-            {price && <span className="tabular-nums">· {price}</span>}
+            {place.mcidName && place.mcidName !== place.category && <span>{place.mcidName}</span>}
+            {price && <span className="tabular-nums tracking-[0.08em]">· {price}</span>}
           </p>
         </div>
         <button
@@ -80,9 +81,9 @@ export function PlaceSheet({
       </header>
 
       <div className="flex-1 overflow-y-auto px-4 pb-4 pt-3">
-        {k?.rank && (
+        {rank && (
           <p className="m-0 mb-3 inline-block text-xs font-medium text-primary-fg bg-primary-weak px-2.5 py-1 rounded-full">
-            {k.rank.text}{k.rank.n ? ` ${k.rank.n}위` : ''}
+            {rank}
           </p>
         )}
 
@@ -92,7 +93,7 @@ export function PlaceSheet({
             <span className="text-xs font-bold text-fg-muted">평점 비교</span>
             {sum.combined != null && (
               <span className="text-xs text-fg-subtle">
-                통합 <span className="font-bold text-fg tabular-nums">{sum.combined.toFixed(1)}</span>
+                {scoreLabel(sum)} <span className="font-bold text-fg tabular-nums">{sum.combined.toFixed(1)}</span>
                 <span className="ml-1">· 신뢰 {sum.confidence === 'high' ? '높음' : '낮음'}</span>
               </span>
             )}
@@ -114,7 +115,7 @@ export function PlaceSheet({
                     />
                   </span>
                 </span>
-                <span className="text-[11px] text-fg-subtle tabular-nums w-14 text-right shrink-0">
+                <span className="text-xs text-fg-subtle tabular-nums w-14 text-right shrink-0">
                   {raw ? formatCount(raw.n) : '—'}
                 </span>
               </li>
@@ -123,7 +124,7 @@ export function PlaceSheet({
 
           {/* 블로그 리뷰는 별점과 다른 성격이라 막대에 섞지 않고 따로 적는다. */}
           {(n?.blogs || k?.blogs) ? (
-            <p className="m-0 mt-2.5 text-[11px] text-fg-subtle tabular-nums">
+            <p className="m-0 mt-2.5 text-xs text-fg-subtle tabular-nums">
               블로그 리뷰
               {n?.blogs ? ` · 네이버 ${formatCount(n.blogs)}` : ''}
               {k?.blogs ? ` · 카카오 ${formatCount(k.blogs)}` : ''}
@@ -131,15 +132,15 @@ export function PlaceSheet({
           ) : null}
 
           {sum.caution && (
-            <p className="m-0 mt-2 text-[11px] text-[var(--matpin-closing)]">{sum.caution}</p>
+            <p className="m-0 mt-2 text-xs text-[var(--matpin-closing)]">{sum.caution}</p>
           )}
           {/* 네이버는 점수를 내려주면서도 자기 화면에는 안 띄우는 가게가 있다(업주 설정).
               값은 현재값이고 계속 갱신되지만, 네이버에서 찾아봐도 안 보이니 그렇다고 적어 둔다. */}
           {n?.scoreHidden && n.score != null && (
-            <p className="m-0 mt-2 text-[11px] text-fg-subtle">네이버 점수는 네이버 화면에 공개되지 않는 가게입니다</p>
+            <p className="m-0 mt-2 text-xs text-fg-subtle">네이버 점수는 네이버 화면에 공개되지 않는 가게입니다</p>
           )}
           {googleEnabled && ratings?.google && (
-            <p className="m-0 mt-2 text-[10px] text-fg-subtle">구글 평점 제공: Google</p>
+            <p className="m-0 mt-2 text-xs text-fg-subtle">구글 평점 제공: Google</p>
           )}
         </div>
 

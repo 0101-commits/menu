@@ -3,8 +3,15 @@
 // 검색창 하나로 장소("강남역")·가게 이름·메뉴·동 이름을 다 받는다.
 // 예전에는 "지도 범위 / 전체" 가 스위치였는데, 두 상태가 대등하므로 세그먼트가 맞다.
 // 스위치는 "켜고 끄는 하나" 를 뜻한다.
+//
+// 줄을 성격으로 나눈다. 예전에는 지름길 버튼·토글 칩·정렬이 한 줄에 다 있어서
+// 384px 패널에서 "평점 4.0+" 가 "평…" 으로 잘렸고, 스크롤 막대까지 숨겨 둬서
+// 더 있다는 신호조차 없었다.
+//
+//   윗줄  한 번에 상태를 바꾸는 것들 — 지금 갈 만한 곳 · 주변 발견 · 정렬
+//   아랫줄 목록을 좁히는 토글 — 영업 중 · 안 가본 곳 · 평점 · 행정구역
 
-import { Search, X, SlidersHorizontal, Sparkles } from 'lucide-react';
+import { Search, X } from 'lucide-react';
 import { TextField, SegmentedControl } from '@seed-design/react';
 import type { SortKey } from '../lib/url-state';
 
@@ -42,6 +49,12 @@ interface Props {
   /** 현위치 1km · 영업 중 · 평점순을 한 번에 건다 */
   onPickNow: () => void;
 
+  /** 행정구역 패널이 열려 있는가 */
+  regionOpen: boolean;
+  onRegionOpenChange: (v: boolean) => void;
+  /** 행정구역이 실제로 걸려 있으면 칩에 그 이름을 적는다 */
+  regionLabel: string | null;
+
   total: number;
 }
 
@@ -53,12 +66,18 @@ const chip = (on: boolean) =>
     ? 'bg-primary text-on-primary border-primary'
     : 'bg-surface text-fg-muted border-line hover:bg-surface-pressed');
 
+// 줄이 넘칠 때 오른쪽 끝을 흐리게 해서 "더 있다" 를 알린다. 막대는 숨겨 둔 상태다.
+const SCROLL_ROW =
+  'flex items-center gap-1.5 overflow-x-auto scrollbar-hide ' +
+  '[mask-image:linear-gradient(to_right,black_calc(100%-24px),transparent)]';
+
 export function ListToolbar({
   query, onQueryChange, onSubmit, scope, onScopeChange,
   nearLabel, radius, onRadiusChange, onClearNear,
   openOnly, onOpenOnlyChange, openOnlyAvailable, minScore, onMinScoreChange,
   sort, onSortChange, canSortDistance, discover, onDiscoverChange,
-  unvisitedOnly, onUnvisitedOnlyChange, onPickNow, total,
+  unvisitedOnly, onUnvisitedOnlyChange, onPickNow,
+  regionOpen, onRegionOpenChange, regionLabel, total,
 }: Props) {
   return (
     <div className="px-3 pt-3 pb-2 border-b border-line-subtle shrink-0 flex flex-col gap-2">
@@ -83,7 +102,7 @@ export function ListToolbar({
       </form>
 
       {nearLabel ? (
-        <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-hide">
+        <div className={SCROLL_ROW}>
           {/* 칩 전체가 해제 버튼이다. 안에 20px 짜리 X 만 누르게 두면 손가락으로 못 맞춘다. */}
           <button
             type="button"
@@ -117,20 +136,39 @@ export function ListToolbar({
         </SegmentedControl.Root>
       )}
 
-      <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-hide" role="group" aria-label="필터">
-        {/* 토글이 아니라 한 번에 여러 조건을 거는 지름길이라 생김새를 다르게 둔다. */}
+      {/* 상태를 바꾸는 줄. 토글 칩과 성격이 다르니 생김새와 자리를 나눈다. */}
+      <div className="flex items-center gap-1.5">
         <button
           type="button"
           onClick={onPickNow}
           className="shrink-0 inline-flex items-center gap-1 min-h-11 px-3.5 rounded-full text-xs font-semibold bg-primary text-on-primary hover:bg-primary-pressed transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
         >
-          <Sparkles className="w-3.5 h-3.5" aria-hidden="true" />
           지금 갈 만한 곳
         </button>
+        <button
+          type="button"
+          onClick={() => onDiscoverChange(!discover)}
+          className={chip(discover)}
+          aria-pressed={discover}
+        >
+          주변 발견
+        </button>
 
-        <span className="shrink-0 w-px h-4 bg-line mx-0.5" aria-hidden="true" />
+        <label className="sr-only" htmlFor="sort-select">정렬</label>
+        <select
+          id="sort-select"
+          value={sort}
+          onChange={(e) => onSortChange(e.target.value as SortKey)}
+          className="ml-auto shrink-0 min-h-11 text-xs rounded-full px-2.5 bg-surface text-fg-muted border border-line focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+        >
+          {canSortDistance && <option value="distance">거리순</option>}
+          <option value="rating">평점순</option>
+          <option value="reviews">리뷰 많은순</option>
+        </select>
+      </div>
 
-        <SlidersHorizontal className="w-3.5 h-3.5 shrink-0 text-fg-subtle" aria-hidden="true" />
+      {/* 목록을 좁히는 줄. 전부 같은 모양의 토글이다. */}
+      <div className={SCROLL_ROW} role="group" aria-label="필터">
         {/* 데이터가 없으면 눌러도 0곳이 된다. 막아 두고 이유를 붙인다. */}
         <button
           type="button"
@@ -158,23 +196,15 @@ export function ListToolbar({
         >
           평점 4.0+
         </button>
-        <button type="button" onClick={() => onDiscoverChange(!discover)} className={chip(discover)} aria-pressed={discover}>
-          주변 발견
-        </button>
-
-        <span className="shrink-0 w-px h-4 bg-line mx-0.5" aria-hidden="true" />
-
-        <label className="sr-only" htmlFor="sort-select">정렬</label>
-        <select
-          id="sort-select"
-          value={sort}
-          onChange={(e) => onSortChange(e.target.value as SortKey)}
-          className="shrink-0 min-h-11 text-xs rounded-full px-2.5 bg-surface text-fg-muted border border-line focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+        <button
+          type="button"
+          onClick={() => onRegionOpenChange(!regionOpen)}
+          className={chip(Boolean(regionLabel))}
+          aria-pressed={Boolean(regionLabel)}
+          aria-expanded={regionOpen}
         >
-          {canSortDistance && <option value="distance">거리순</option>}
-          <option value="rating">평점순</option>
-          <option value="reviews">리뷰 많은순</option>
-        </select>
+          {regionLabel ?? '행정구역'}
+        </button>
       </div>
     </div>
   );

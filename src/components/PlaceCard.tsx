@@ -11,7 +11,7 @@ import type { Place, Ratings } from '../types';
 import { RatingRow } from './RatingRow';
 import { colorOf } from '../lib/categories';
 import { formatDistance } from '../lib/geo';
-import { formatPrice, summarize, type SourceMeans } from '../lib/rating';
+import { formatPrice, rankLabel, scoreLabel, summarize, type SourceMeans } from '../lib/rating';
 import { openStatus } from '../lib/hours';
 
 interface Props {
@@ -23,7 +23,6 @@ interface Props {
   onSelect: (p: Place) => void;
   onDetail: (p: Place) => void;
   means: SourceMeans;
-  googleEnabled: boolean;
   ratingsLoading: boolean;
   visited: boolean;
 }
@@ -37,12 +36,14 @@ const STATE_CLASS: Record<string, string> = {
 };
 
 export function PlaceCard({
-  place, ratings, distanceKm, selected, onSelect, onDetail, means, googleEnabled, ratingsLoading, visited,
+  place, ratings, distanceKm, selected, onSelect, onDetail, means, ratingsLoading, visited,
 }: Props) {
   const status = openStatus(ratings?.kakao?.hours, undefined, ratings?.kakao?.hoursDay);
   const price = formatPrice(ratings?.kakao?.price);
   const sum = summarize(ratings, means);
-  const rank = ratings?.kakao?.rank;
+  const rank = rankLabel(ratings?.kakao?.rank);
+  // 우상단 배지가 이미 대분류를 말한다. 세분류가 같은 말이면 메타 줄에서 뺀다.
+  const detail = place.mcidName && place.mcidName !== place.category ? place.mcidName : null;
 
   return (
     <li
@@ -63,7 +64,7 @@ export function PlaceCard({
               className="w-2 h-2 rounded-full shrink-0"
               style={{ background: colorOf(place.category) }}
             />
-            <span className="font-bold text-fg text-[15px] truncate">{place.name}</span>
+            <span className="font-bold text-fg text-base truncate">{place.name}</span>
             {visited && (
               <Check className="w-3.5 h-3.5 shrink-0 text-[var(--matpin-open)]" aria-label="가본 곳" />
             )}
@@ -78,14 +79,19 @@ export function PlaceCard({
           </span>
         </span>
 
+        {/* 첫 항목은 항상 있는 값(동)이다. 앞에 옵션 항목을 두면 그게 비었을 때 줄이 가운뎃점으로 시작한다. */}
         <span className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-fg-muted">
-          {place.mcidName && <span>{place.mcidName}</span>}
-          <span aria-hidden="true">·</span>
           <span>{place.dong || place.sigungu}</span>
+          {detail && (
+            <>
+              <span aria-hidden="true">·</span>
+              <span>{detail}</span>
+            </>
+          )}
           {price && (
             <>
               <span aria-hidden="true">·</span>
-              <span className="tabular-nums">{price}</span>
+              <span className="tabular-nums tracking-[0.08em]">{price}</span>
             </>
           )}
           {status.text && (
@@ -97,26 +103,26 @@ export function PlaceCard({
         </span>
 
         {ratings?.closed && (
-          <span className="mt-1.5 mr-1.5 inline-block text-[11px] font-medium text-[var(--matpin-closing)] bg-surface-fill px-2 py-0.5 rounded-full">
+          <span className="mt-1.5 mr-1.5 inline-block text-xs font-medium text-[var(--matpin-closing)] bg-surface-fill px-2 py-0.5 rounded-full">
             폐업 추정
           </span>
         )}
         {rank && (
-          <span className="mt-1.5 inline-block text-[11px] font-medium text-primary-fg bg-primary-weak px-2 py-0.5 rounded-full">
-            {rank.text}
-            {rank.n ? ` ${rank.n}위` : ''}
+          <span className="mt-1.5 inline-block text-xs font-medium text-primary-fg bg-primary-weak px-2 py-0.5 rounded-full">
+            {rank}
           </span>
         )}
       </button>
 
       <div className="px-4 pb-3 pt-1.5 border-t border-line-subtle mt-1">
-        <RatingRow place={place} ratings={ratings} googleEnabled={googleEnabled} loading={ratingsLoading} />
+        <RatingRow place={place} ratings={ratings} loading={ratingsLoading} />
 
         <div className="mt-2 flex items-center justify-between gap-2">
-          <p className="text-[11px] text-fg-subtle m-0 min-w-0 truncate">
+          <p className="text-xs text-fg-subtle m-0 min-w-0 truncate">
             {sum.combined != null ? (
               <>
-                통합 <span className="font-semibold text-fg-muted tabular-nums">{sum.combined.toFixed(1)}</span>
+                {scoreLabel(sum)}{' '}
+                <span className="font-semibold text-fg-muted tabular-nums">{sum.combined.toFixed(1)}</span>
                 {sum.caution && <span className="text-[var(--matpin-closing)]"> · {sum.caution}</span>}
               </>
             ) : (

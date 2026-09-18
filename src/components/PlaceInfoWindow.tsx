@@ -8,18 +8,17 @@ import type { Place, Ratings } from '../types';
 import { RatingRow } from './RatingRow';
 import { colorOf } from '../lib/categories';
 import { openStatus } from '../lib/hours';
-import { summarize, type SourceMeans } from '../lib/rating';
+import { scoreLabel, summarize, type SourceMeans } from '../lib/rating';
 
 interface Props {
   place: Place;
   ratings?: Ratings;
   means: SourceMeans;
-  googleEnabled: boolean;
   onClose: () => void;
   onDetail: (p: Place) => void;
 }
 
-export function PlaceInfoWindow({ place, ratings, means, googleEnabled, onClose, onDetail }: Props) {
+export function PlaceInfoWindow({ place, ratings, means, onClose, onDetail }: Props) {
   const status = openStatus(ratings?.kakao?.hours, undefined, ratings?.kakao?.hoursDay);
   const sum = summarize(ratings, means);
 
@@ -31,11 +30,11 @@ export function PlaceInfoWindow({ place, ratings, means, googleEnabled, onClose,
         <div className="min-w-0">
           <div className="flex items-center gap-1.5">
             <span aria-hidden="true" className="w-2 h-2 rounded-full shrink-0" style={{ background: colorOf(place.category) }} />
-            <h3 className="font-bold text-[15px] text-fg m-0 truncate">{place.name}</h3>
+            <h3 className="font-bold text-base text-fg m-0 truncate">{place.name}</h3>
           </div>
-          <p className="m-0 mt-0.5 text-[11px] text-fg-muted truncate">
+          <p className="m-0 mt-0.5 text-xs text-fg-muted truncate">
             {place.category}
-            {place.mcidName ? ` · ${place.mcidName}` : ''}
+            {place.mcidName && place.mcidName !== place.category ? ` · ${place.mcidName}` : ''}
             {status.text ? ` · ${status.text}` : ''}
           </p>
         </div>
@@ -50,7 +49,7 @@ export function PlaceInfoWindow({ place, ratings, means, googleEnabled, onClose,
       </div>
 
       <div className="mt-2.5 pt-2.5 border-t border-line-subtle">
-        <RatingRow place={place} ratings={ratings} googleEnabled={googleEnabled} />
+        <RatingRow place={place} ratings={ratings} />
       </div>
 
       <button
@@ -59,7 +58,7 @@ export function PlaceInfoWindow({ place, ratings, means, googleEnabled, onClose,
         className="mt-2 w-full flex items-center justify-between gap-1 min-h-11 px-3 rounded-lg bg-surface-fill hover:bg-surface-pressed transition-colors text-sm font-medium text-fg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
       >
         <span className="text-xs text-fg-muted tabular-nums">
-          {sum.combined != null ? `통합 ${sum.combined.toFixed(1)}` : '평점 없음'}
+          {sum.combined != null ? `${scoreLabel(sum)} ${sum.combined.toFixed(1)}` : '평점 없음'}
         </span>
         <span className="flex items-center gap-0.5">
           자세히

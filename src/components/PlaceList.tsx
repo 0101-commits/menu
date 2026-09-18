@@ -16,7 +16,6 @@ interface Props {
   places: Place[];
   ratings: RatingsMap;
   means: SourceMeans;
-  googleEnabled: boolean;
   ratingsLoading: boolean;
   selectedPlaceId: string | null;
   onSelect: (p: Place) => void;
@@ -29,7 +28,7 @@ interface Props {
 }
 
 export function PlaceList({
-  places, ratings, means, googleEnabled, ratingsLoading,
+  places, ratings, means, ratingsLoading,
   selectedPlaceId, onSelect, onDetail, origin, emptyHint, visited,
 }: Props) {
   const [limit, setLimit] = useState(PAGE);
@@ -82,7 +81,6 @@ export function PlaceList({
           onSelect={onSelect}
           onDetail={onDetail}
           means={means}
-          googleEnabled={googleEnabled}
           ratingsLoading={ratingsLoading}
           visited={visited.has(place.placeId)}
         />
