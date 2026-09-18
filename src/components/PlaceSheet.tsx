@@ -67,7 +67,7 @@ export function PlaceSheet({
           <p className="mt-1 m-0 flex flex-wrap items-center gap-x-1.5 text-xs text-fg-muted">
             <span className="bg-surface-fill px-2 py-0.5 rounded-full font-medium">{place.category}</span>
             {place.mcidName && place.mcidName !== place.category && <span>{place.mcidName}</span>}
-            {price && <span className="tabular-nums tracking-[0.08em]">· {price}</span>}
+            {price && <span className="tabular-nums tracking-[0.22em]">· {price}</span>}
           </p>
         </div>
         <button

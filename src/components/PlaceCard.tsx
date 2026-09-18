@@ -91,7 +91,7 @@ export function PlaceCard({
           {price && (
             <>
               <span aria-hidden="true">·</span>
-              <span className="tabular-nums tracking-[0.08em]">{price}</span>
+              <span className="tabular-nums tracking-[0.22em]">{price}</span>
             </>
           )}
           {status.text && (
