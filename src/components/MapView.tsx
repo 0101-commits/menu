@@ -25,6 +25,13 @@ import type { SourceMeans } from '../lib/rating';
 
 const PANEL = 'bg-surface-raised text-fg rounded-xl shadow-xl border border-line';
 
+// 팝업(PlaceInfoWindow)이 마커 위로 차지하는 높이. 카드 약 174px + 마커와의 간격.
+const POPUP_SPACE = 224;
+// 마커를 시트 바로 위 몇 px 에 둘지.
+const POPUP_GAP = 28;
+// 팝업 아랫변과 마커 사이 간격. 마커 그림(선택 시 44px)을 덮지 않을 만큼.
+const MARKER_GAP = 48;
+
 // ---------- 마커 그림 ----------
 // 색군마다 핀을 하나씩 만든다. 4,084 개 마커가 이 7 장을 공유한다.
 function pinSvg(color: string, selected: boolean) {
@@ -112,7 +119,9 @@ interface Props {
   selectedPlace: Place | null;
   onSelect: (p: Place | null) => void;
   onDetail: (p: Place) => void;
-  onBoundsChange: (visible: Place[], center: { lat: number; lng: number }) => void;
+  onBoundsChange: (visible: Place[], center: { lat: number; lng: number }, level: number) => void;
+  /** 새로고침·링크로 복원할 첫 지도 자리. 없으면 데이터 첫 곳으로 연다. */
+  initialView?: { c?: { lat: number; lng: number }; z?: number };
   focus: MapFocus | null;
   discovered: Discovered[];
   discoveredRatings: RatingsMap;
@@ -121,13 +130,18 @@ interface Props {
   discoverFailed: Set<string>;
   discoverUnavailable: boolean;
   topOffset: number;
+  /**
+   * 시트가 지도 아래쪽을 덮고 있는 높이(px).
+   * 이걸 모르면 map.setCenter 가 마커를 "화면" 한가운데 — 곧 시트 뒤 — 에 놓는다.
+   */
+  bottomInset: number;
   onStatusChange?: (s: 'loading' | 'ready' | 'error') => void;
 }
 
 export function MapView({
   places, ratings, means, showGoogle, selectedCategories, selectedPlace,
-  onSelect, onDetail, onBoundsChange, focus, discovered, discoveredRatings,
-  onDiscoveredOpen, discoverFailed, discoverUnavailable, topOffset, onStatusChange,
+  onSelect, onDetail, onBoundsChange, initialView, focus, discovered, discoveredRatings,
+  onDiscoveredOpen, discoverFailed, discoverUnavailable, topOffset, bottomInset, onStatusChange,
 }: Props) {
   const mapEl = useRef<HTMLDivElement>(null);
   const kakaoRef = useRef<KakaoNS>(null);
@@ -153,8 +167,39 @@ export function MapView({
   const [nearby, setNearby] = useState<Place[] | null>(null);
   const [openDiscovered, setOpenDiscovered] = useState<Discovered | null>(null);
 
+  // 보이는 지도 영역 한가운데(정확히는 팝업이 들어갈 자리)로 좌표를 옮긴다.
+  //
+  // map.setCenter 는 지도 <div> 전체의 한가운데에 놓는다. 그런데 모바일에서는 그 아래쪽을
+  // 바텀시트가 덮고 있어서, 390×844 실측으로 선택한 가게의 팝업이 100% 시트 뒤에 있었다.
+  // 마커를 "보이는 띠" 의 아래쪽(시트 바로 위)에 두면 팝업(약 219px)이 그 위에 온전히 선다.
+  const centerForPopup = useCallback((position: any) => {
+    const map = mapRef.current;
+    const el = mapEl.current;
+    if (!map || !el) return;
+    map.setCenter(position);
+
+    const mapH = el.getBoundingClientRect().height;
+    const visibleH = mapH - bottomInset;
+    // 띠가 팝업보다 좁으면 어디에 둬도 잘린다. 그때는 그냥 가운데에 둔다(시트를 내리면 맞는다).
+    if (visibleH < POPUP_SPACE + 40) return;
+    const shift = mapH / 2 - (visibleH - POPUP_GAP);
+    if (Math.abs(shift) <= 1) return;
+
+    // panBy 로는 안 된다 — 같은 틱의 setCenter 뒤에 부르면 먹지 않는다(실측).
+    // 화면 좌표로 내려가 "중심을 남쪽으로 shift px 옮긴" 좌표를 직접 만든다.
+    // 그러면 방금 중심에 놓인 마커가 그만큼 위로 올라온다.
+    const kakao = kakaoRef.current;
+    const proj = map.getProjection?.();
+    if (!kakao || !proj) return;
+    const p = proj.containerPointFromCoords(position);
+    map.setCenter(proj.coordsFromContainerPoint(new kakao.maps.Point(p.x, p.y + shift)));
+  }, [bottomInset]);
+
   // 콜백을 지도 이벤트 안에서 쓰려면 최신 값을 ref 로 들고 있어야 한다.
   // 이벤트 리스너는 한 번만 붙고 클로저는 그때 값을 가둔다.
+  // 첫 마운트 때의 값만 쓴다. URL 은 이동할 때마다 갱신되므로 나중 값에 끌려가면
+  // 지도가 자기가 적은 주소를 다시 읽고 되돌아가는 꼴이 된다.
+  const initialRef = useRef(initialView);
   const cb = useRef({ onSelect, onBoundsChange, places, onDiscoveredOpen });
   cb.current = { onSelect, onBoundsChange, places, onDiscoveredOpen };
 
@@ -173,10 +218,15 @@ export function MapView({
         kakaoRef.current = kakao;
         imagesRef.current = buildImages(kakao);
 
+        // 복원할 자리가 있으면 그 자리로 연다. 없을 때만 데이터의 첫 곳.
         const first = places[0];
+        const view = initialRef.current;
         const map = new kakao.maps.Map(mapEl.current, {
-          center: new kakao.maps.LatLng(first?.lat ?? 37.5665, first?.lng ?? 126.978),
-          level: 7,
+          center: new kakao.maps.LatLng(
+            view?.c?.lat ?? first?.lat ?? 37.5665,
+            view?.c?.lng ?? first?.lng ?? 126.978,
+          ),
+          level: view?.z ?? 7,
         });
         mapRef.current = map;
 
@@ -256,6 +306,7 @@ export function MapView({
           cb.current.onBoundsChange(
             cb.current.places.filter((p) => b.contain(new kakao.maps.LatLng(p.lat, p.lng))),
             { lat: c.getLat(), lng: c.getLng() },
+            map.getLevel(),
           );
         };
         kakao.maps.event.addListener(map, 'idle', report);
@@ -313,21 +364,43 @@ export function MapView({
     marker?.setZIndex(10);
 
     const position = new kakao.maps.LatLng(selectedPlace.lat, selectedPlace.lng);
-    map.setCenter(position);
+    centerForPopup(position);
 
     if (!infoRef.current) {
+      // yAnchor 를 쓰지 않는다.
+      //
+      // CustomOverlay 는 setMap 하는 시점의 콘텐츠 높이로 기준점을 잡는데, 이 안은 React 가
+      // 나중에 그린다. 그래서 높이 0 으로 계산돼 yAnchor:1(아래쪽 끝 맞춤)이 사실상 0 처럼
+      // 동작했고, 팝업이 마커 위가 아니라 아래로 늘어졌다 — 실측으로 창의 윗변이 마커보다
+      // 48px 위, 아랫변이 174px 아래였다. 그 아래가 곧 시트라 아무것도 안 보였다.
+      // CSS transform 은 자기 높이를 자기가 안다. 언제 그려지든 마커 위에 선다.
       const el = document.createElement('div');
       el.style.position = 'relative';
-      el.style.bottom = '48px';
+      // 가로도 같은 이유로 어긋난다(xAnchor 도 폭을 모른 채 계산된다 — 실측으로 창이
+      // 마커 오른쪽에 붙어 화면 밖으로 78px 나갔다). 가운데 맞춤도 CSS 에 맡긴다.
+      el.style.transform = `translate(-50%, calc(-100% - ${MARKER_GAP}px))`;
       infoRef.current = {
         el,
         root: createRoot(el),
-        overlay: new kakao.maps.CustomOverlay({ position, content: el, yAnchor: 1, zIndex: 20 }),
+        overlay: new kakao.maps.CustomOverlay({ position, content: el, xAnchor: 0, yAnchor: 0, zIndex: 20 }),
       };
     }
     infoRef.current.overlay.setPosition(position);
     infoRef.current.overlay.setMap(map);
+    // centerForPopup 을 deps 에 넣지 않는다. bottomInset 이 바뀔 때마다(시트를 끌 때마다)
+    // 이 effect 전체가 다시 돌면 지도가 선택한 가게로 계속 튕겨 돌아간다.
+    // 시트 높이가 바뀐 뒤의 재보정은 아래 별도 effect 가 맡는다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedPlace, status]);
+
+  // 시트 단계가 바뀌면 보이는 띠의 크기도 바뀐다. 선택된 곳이 있을 때만 다시 맞춘다.
+  // (선택이 없으면 사용자가 보던 자리를 건드릴 이유가 없다)
+  useEffect(() => {
+    const kakao = kakaoRef.current;
+    if (!kakao || !selectedPlace || status !== 'ready') return;
+    centerForPopup(new kakao.maps.LatLng(selectedPlace.lat, selectedPlace.lng));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bottomInset]);
 
   // 오버레이 내용만 따로 그린다.
   //
@@ -423,13 +496,14 @@ export function MapView({
     }
     const position = new kakao.maps.LatLng(openDiscovered.lat, openDiscovered.lng);
     if (!discRef.current) {
+      // 위 팝업과 같은 이유로 anchor 대신 transform 을 쓴다(내용이 나중에 그려진다).
       const el = document.createElement('div');
       el.style.position = 'relative';
-      el.style.bottom = '26px';
+      el.style.transform = 'translate(-50%, calc(-100% - 26px))';
       discRef.current = {
         el,
         root: createRoot(el),
-        overlay: new kakao.maps.CustomOverlay({ position, content: el, yAnchor: 1, zIndex: 20 }),
+        overlay: new kakao.maps.CustomOverlay({ position, content: el, xAnchor: 0, yAnchor: 0, zIndex: 20 }),
       };
     }
     const d = discRef.current;
@@ -489,7 +563,11 @@ export function MapView({
       </div>
 
       {notice && (
-        <div className={`absolute bottom-32 left-1/2 -translate-x-1/2 z-30 ${PANEL} px-4 py-3 max-w-[320px] flex items-start gap-2`} role="status">
+        <div
+          className={`absolute left-1/2 -translate-x-1/2 z-30 ${PANEL} px-4 py-3 max-w-[320px] flex items-start gap-2`}
+          style={{ bottom: bottomInset + 16 }}
+          role="status"
+        >
           <p className="text-sm text-fg-muted flex-1 m-0">{notice}</p>
           <button
             type="button"
@@ -503,7 +581,10 @@ export function MapView({
       )}
 
       {nearby && nearby.length > 0 && (
-        <div className={`absolute bottom-20 left-1/2 -translate-x-1/2 z-30 ${PANEL} w-72 overflow-hidden`}>
+        <div
+          className={`absolute left-1/2 -translate-x-1/2 z-30 ${PANEL} w-72 overflow-hidden`}
+          style={{ bottom: bottomInset + 16 }}
+        >
           <div className="flex items-center justify-between px-4 py-2 border-b border-line-subtle">
             <span className="font-semibold text-sm text-fg">이 근처 {nearby.length}곳</span>
             <button
@@ -535,13 +616,16 @@ export function MapView({
         </div>
       )}
 
+      {/* 현위치 버튼은 시트 위로 띄운다. 예전에는 bottom-16 고정이라
+          시트가 반만 올라와도 그 뒤에 숨어 누를 수가 없었다. */}
       {status === 'ready' && (
         <button
           type="button"
           onClick={moveToMe}
           disabled={locating}
           aria-label="현재 위치로 이동"
-          className="absolute bottom-16 right-4 z-10 grid place-items-center w-12 h-12 bg-surface-raised rounded-full shadow-lg hover:bg-surface-pressed transition-colors border border-line disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+          style={{ bottom: bottomInset + 16 }}
+          className="absolute right-4 z-10 grid place-items-center w-12 h-12 bg-surface-raised rounded-full shadow-lg hover:bg-surface-pressed transition-colors border border-line disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
         >
           {locating
             ? <Loader2 className="w-5 h-5 text-primary-fg animate-spin" />
