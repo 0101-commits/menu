@@ -11,7 +11,8 @@
 //   윗줄  한 번에 상태를 바꾸는 것들 — 지금 갈 만한 곳 · 주변 발견 · 정렬
 //   아랫줄 목록을 좁히는 토글 — 영업 중 · 안 가본 곳 · 평점 · 행정구역
 
-import { Search, X } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Search, X, SlidersHorizontal, ChevronDown, ChevronUp } from 'lucide-react';
 import { TextField, SegmentedControl } from '@seed-design/react';
 import type { SortKey } from '../lib/url-state';
 
@@ -56,6 +57,16 @@ interface Props {
   regionLabel: string | null;
 
   total: number;
+  /** 데스크톱은 공간이 남으므로 늘 펼쳐 둔다. 모바일만 접는다. */
+  alwaysExpanded?: boolean;
+  /** 검색줄 바로 아래에 늘 서는 것(음식 종류 칩). 접어도 사라지지 않는다. */
+  children?: React.ReactNode;
+}
+
+const STORE_KEY = 'matpin-toolbar-expanded';
+
+function readExpanded() {
+  try { return localStorage.getItem(STORE_KEY) === '1'; } catch { return false; }
 }
 
 // 목록에서 가장 자주 누르는 것들이라 44px 로 맞춘다. 나머지 컨트롤과 같은 기준이다.
@@ -78,12 +89,26 @@ export function ListToolbar({
   sort, onSortChange, canSortDistance, discover, onDiscoverChange,
   unvisitedOnly, onUnvisitedOnlyChange, onPickNow,
   regionOpen, onRegionOpenChange, regionLabel, total,
+  alwaysExpanded = false, children,
 }: Props) {
+  const [open, setOpen] = useState(readExpanded);
+  useEffect(() => {
+    try { localStorage.setItem(STORE_KEY, open ? '1' : '0'); } catch { /* 프라이빗 모드 */ }
+  }, [open]);
+
+  const expanded = alwaysExpanded || open;
+
+  // 접었을 때도 몇 개가 걸려 있는지는 보여야 한다. 안 그러면 "왜 이것밖에 안 나오지" 가 된다.
+  const activeCount =
+    (openOnly ? 1 : 0) + (unvisitedOnly ? 1 : 0) + (minScore != null ? 1 : 0) +
+    (regionLabel ? 1 : 0) + (discover ? 1 : 0) + (scope === 'all' ? 1 : 0);
+
   return (
-    <div className="px-3 pt-3 pb-2 border-b border-line-subtle shrink-0 flex flex-col gap-2">
+    <div className="px-3 pt-2 pb-2 border-b border-line-subtle shrink-0 flex flex-col gap-2">
       <form
         onSubmit={(e) => { e.preventDefault(); onSubmit(); }}
         role="search"
+        className="flex items-center gap-1.5"
       >
         {/* 아이콘은 TextField 의 PrefixIcon 슬롯에 넣는다.
             절대배치로 얹으면 입력 텍스트와 겹쳐 글자가 가려진다. */}
@@ -99,9 +124,31 @@ export function ListToolbar({
             enterKeyHint="search"
           />
         </TextField.Root>
+        {!alwaysExpanded && (
+          <button
+            type="button"
+            onClick={() => setOpen((v) => !v)}
+            aria-expanded={expanded}
+            aria-label={`필터${activeCount ? ` (${activeCount}개 적용됨)` : ''}`}
+            className={`shrink-0 inline-flex items-center gap-0.5 min-h-11 px-2.5 rounded-full text-xs font-semibold border transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${
+              activeCount
+                ? 'bg-primary text-on-primary border-primary'
+                : 'bg-surface text-fg-muted border-line hover:bg-surface-pressed'
+            }`}
+          >
+            <SlidersHorizontal className="w-3.5 h-3.5" aria-hidden="true" />
+            {activeCount > 0 && <span className="tabular-nums">{activeCount}</span>}
+            {expanded
+              ? <ChevronUp className="w-3.5 h-3.5" aria-hidden="true" />
+              : <ChevronDown className="w-3.5 h-3.5" aria-hidden="true" />}
+          </button>
+        )}
       </form>
 
-      {nearLabel ? (
+      {/* 음식 종류 칩. 지도 위 고정 바로 두면 60px 를 늘 먹는다 — 목록 안으로 들였다. */}
+      {children}
+
+      {!expanded ? null : nearLabel ? (
         <div className={SCROLL_ROW}>
           {/* 칩 전체가 해제 버튼이다. 안에 20px 짜리 X 만 누르게 두면 손가락으로 못 맞춘다. */}
           <button
@@ -137,6 +184,7 @@ export function ListToolbar({
       )}
 
       {/* 상태를 바꾸는 줄. 토글 칩과 성격이 다르니 생김새와 자리를 나눈다. */}
+      {expanded && (
       <div className="flex items-center gap-1.5">
         <button
           type="button"
@@ -166,8 +214,10 @@ export function ListToolbar({
           <option value="reviews">리뷰 많은순</option>
         </select>
       </div>
+      )}
 
       {/* 목록을 좁히는 줄. 전부 같은 모양의 토글이다. */}
+      {expanded && (
       <div className={SCROLL_ROW} role="group" aria-label="필터">
         {/* 데이터가 없으면 눌러도 0곳이 된다. 막아 두고 이유를 붙인다. */}
         <button
@@ -206,6 +256,7 @@ export function ListToolbar({
           {regionLabel ?? '행정구역'}
         </button>
       </div>
+      )}
     </div>
   );
 }

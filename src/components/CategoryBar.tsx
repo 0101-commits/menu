@@ -59,7 +59,7 @@ export function CategoryBar({ available, selected, onChange, counts }: Props) {
 
   return (
     <div
-      className="flex items-center gap-2 px-3 py-2 overflow-x-auto scrollbar-hide"
+      className="flex items-center gap-2 px-3 py-1.5 overflow-x-auto scrollbar-hide"
       role="group"
       aria-label="음식 종류 필터"
     >

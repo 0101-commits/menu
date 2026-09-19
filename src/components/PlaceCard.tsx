@@ -53,11 +53,15 @@ export function PlaceCard({
         selected ? 'border-primary bg-primary-weak' : 'border-line bg-surface hover:bg-surface-pressed'
       }`}
     >
+      {/* 한 번 누르면 지도에서 고르고, 고른 카드를 다시 누르면 상세를 연다.
+          예전에는 아래에 "자세히" 줄이 따로 있었는데, 그 줄 하나가 카드의 40px 였고
+          390×844 에서는 목록 본문(111px)이 카드(173px)보다 작았다. */}
       <button
         type="button"
-        onClick={() => onSelect(place)}
+        onClick={() => (selected ? onDetail(place) : onSelect(place))}
         aria-pressed={selected}
-        className="w-full text-left px-4 pt-3.5 pb-2 rounded-t-xl focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-primary"
+        aria-label={selected ? `${place.name} 자세히 보기` : place.name}
+        className="w-full text-left px-3.5 pt-2 pb-1.5 rounded-t-xl focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-primary"
       >
         <span className="flex justify-between items-start gap-2">
           <span className="flex items-center gap-1.5 min-w-0">
@@ -75,9 +79,22 @@ export function PlaceCard({
             {distanceKm != null && (
               <span className="text-xs text-fg-subtle tabular-nums">{formatDistance(distanceKm)}</span>
             )}
+            {/* 통합 점수. 아래 3사 칸이 "왜" 를 말하고, 이 배지가 "얼마나" 를 말한다. */}
+            {sum.combined != null && (
+              <span
+                className="text-xs font-bold bg-surface-fill text-fg px-2 py-0.5 rounded-full tabular-nums"
+                title={`${scoreLabel(sum)} ${sum.combined.toFixed(1)}`}
+              >
+                {sum.combined.toFixed(1)}
+              </span>
+            )}
             <span className="text-xs bg-surface-fill text-fg-muted px-2 py-0.5 rounded-full font-medium">
               {place.category}
             </span>
+            <ChevronRight
+              className={`w-3.5 h-3.5 shrink-0 ${selected ? 'text-primary-fg' : 'text-fg-subtle'}`}
+              aria-hidden="true"
+            />
           </span>
         </span>
 
@@ -102,6 +119,12 @@ export function PlaceCard({
               <span className={`font-medium ${STATE_CLASS[status.state]}`}>{status.text}</span>
             </>
           )}
+          {sum.caution && (
+            <>
+              <span aria-hidden="true">·</span>
+              <span className="text-[var(--matpin-closing)]">{sum.caution}</span>
+            </>
+          )}
         </span>
 
         {ratings?.closed && (
@@ -116,30 +139,8 @@ export function PlaceCard({
         )}
       </button>
 
-      <div className="px-4 pb-3 pt-1.5 border-t border-line-subtle mt-1">
+      <div className="px-3.5 pb-2 pt-1.5 border-t border-line-subtle mt-0.5">
         <RatingRow place={place} ratings={ratings} showGoogle={showGoogle} loading={ratingsLoading} />
-
-        <div className="mt-2 flex items-center justify-between gap-2">
-          <p className="text-xs text-fg-subtle m-0 min-w-0 truncate">
-            {sum.combined != null ? (
-              <>
-                {scoreLabel(sum)}{' '}
-                <span className="font-semibold text-fg-muted tabular-nums">{sum.combined.toFixed(1)}</span>
-                {sum.caution && <span className="text-[var(--matpin-closing)]"> · {sum.caution}</span>}
-              </>
-            ) : (
-              '평점 없음'
-            )}
-          </p>
-          <button
-            type="button"
-            onClick={() => onDetail(place)}
-            className="shrink-0 flex items-center gap-0.5 text-xs font-medium text-primary-fg min-h-11 -my-3 px-1 rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-          >
-            자세히
-            <ChevronRight className="w-3.5 h-3.5" aria-hidden="true" />
-          </button>
-        </div>
       </div>
     </li>
   );

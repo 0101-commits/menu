@@ -14,7 +14,7 @@ import { PlaceSheet } from './components/PlaceSheet';
 import { CategoryBar } from './components/CategoryBar';
 import { ListToolbar } from './components/ListToolbar';
 import { RegionPicker, regionLabelOf } from './components/RegionPicker';
-import { ListPanel, useDesktop, type Snap } from './components/ListPanel';
+import { ListPanel, sheetInset, useDesktop, type Snap } from './components/ListPanel';
 import type { Discovered, GoogleRating, Place, RatingsMap } from './types';
 import { loadPlaces, loadRatings } from './lib/data';
 import { buildIndex, parseQuery, searchPlaces } from './lib/search';
@@ -73,6 +73,8 @@ export default function App() {
   // 빈 배열로 두면 지도가 안 뜬 동안 목록이 0곳이 되어 앱 전체가 죽은 것처럼 보인다.
   const [visiblePlaces, setVisiblePlaces] = useState<Place[] | null>(null);
   const [mapCenter, setMapCenter] = useState<{ lat: number; lng: number } | null>(null);
+  // 지도 확대 단계. 주소에 적어 두지 않으면 새로고침했을 때 중심만 맞고 배율이 달라진다.
+  const [mapLevel, setMapLevel] = useState<number | null>(null);
   const [focus, setFocus] = useState<MapFocus | null>(null);
   const [selectedPlace, setSelectedPlace] = useState<Place | null>(null);
   const [detailPlace, setDetailPlace] = useState<Place | null>(null);
@@ -89,19 +91,31 @@ export default function App() {
 
   const desktop = useDesktop();
   const [snap, setSnap] = useState<Snap>('half');
+
+  // 시트가 지도 아래쪽을 몇 px 덮는지. 지도가 이걸 알아야 선택한 가게의 팝업을
+  // 시트 뒤가 아니라 보이는 자리에 띄운다(실측: 예전에는 100% 가려졌다).
+  const [viewportH, setViewportH] = useState(() => (typeof window === 'undefined' ? 0 : window.innerHeight));
+  useEffect(() => {
+    const on = () => setViewportH(window.innerHeight);
+    window.addEventListener('resize', on);
+    return () => window.removeEventListener('resize', on);
+  }, []);
+  const bottomInset = desktop ? 0 : sheetInset(snap, viewportH);
   const [colorScheme, setColorScheme] = useState<ColorScheme>(readColorScheme);
   const chipBarRef = useRef<HTMLDivElement>(null);
   const [chipBarHeight, setChipBarHeight] = useState(48);
 
   // 칩 바 높이는 칩 크기와 줄바꿈에 따라 달라진다. 상수로 박아두면 지도 상단이 가려진다.
+  // 모바일에서는 칩 바가 지도 위에 없다(시트 안으로 들였다) — 잴 것도 없다.
   useEffect(() => {
+    if (!desktop) { setChipBarHeight(0); return; }
     const el = chipBarRef.current;
     if (!el) return;
     const ro = new ResizeObserver(([entry]) => setChipBarHeight(entry.contentRect.height));
     ro.observe(el);
     setChipBarHeight(el.getBoundingClientRect().height);
     return () => ro.disconnect();
-  }, []);
+  }, [desktop]);
 
   // ---------- 로딩 ----------
   useEffect(() => {
@@ -379,13 +393,18 @@ export default function App() {
       place: detailPlace?.placeId,
       all: scope === 'all' || undefined,
       discover: discover || undefined,
+      // 지도 자리도 적는다. 지도는 'idle' 에서만 알려 주므로 손을 뗀 뒤 한 번씩만 바뀐다.
+      c: mapCenter ?? undefined,
+      z: mapLevel ?? undefined,
     });
-  }, [near, radius, categories, textFilter, sort, openOnly, minScore, detailPlace, scope, discover]);
+  }, [near, radius, categories, textFilter, sort, openOnly, minScore, detailPlace, scope, discover, mapCenter, mapLevel]);
 
   // ---------- 조작 ----------
   const handleSelect = useCallback((p: Place | null) => {
     setSelectedPlace(p);
-    if (p && !desktop && snap === 'peek') setSnap('half');
+    // 접혀 있으면 목록이 보이게 올리고, 전체로 펴져 있으면 지도가 보이게 내린다.
+    // full(92svh)에서는 지도에 남는 띠가 팝업(약 220px)보다 좁아 무엇을 골랐는지 못 본다.
+    if (p && !desktop && (snap === 'peek' || snap === 'full')) setSnap('half');
   }, [desktop, snap]);
 
   const handleDetail = useCallback((p: Place) => {
@@ -394,9 +413,10 @@ export default function App() {
     if (!desktop) setSnap('full');
   }, [desktop]);
 
-  const handleViewChange = useCallback((vp: Place[], center: { lat: number; lng: number }) => {
+  const handleViewChange = useCallback((vp: Place[], center: { lat: number; lng: number }, level: number) => {
     setVisiblePlaces(vp);
     setMapCenter(center);
+    setMapLevel(level);
   }, []);
 
   const toggleColorScheme = () => {
@@ -474,48 +494,63 @@ export default function App() {
             discoverFailed={discoverFailed}
             discoverUnavailable={!RATINGS_API}
             topOffset={chipBarHeight}
+            bottomInset={bottomInset}
+            initialView={{ c: initial.c, z: initial.z }}
           />
         )}
       </div>
 
-      {/* 카테고리 칩 */}
-      <div
-        ref={chipBarRef}
-        className="absolute top-0 right-0 left-0 lg:left-[416px] z-20 bg-surface/95 backdrop-blur-sm border-b border-line-subtle"
+      {/* 카테고리 칩. 데스크톱에서만 지도 위에 선다 —
+          모바일에서는 60.8px 를 늘 먹었고, 그만큼이 목록에서 빠졌다(시트 안으로 들였다). */}
+      {desktop && (
+        <div
+          ref={chipBarRef}
+          className="absolute top-0 right-0 left-[416px] z-20 bg-surface/95 backdrop-blur-sm border-b border-line-subtle"
+        >
+          <CategoryBar available={available} selected={categories} onChange={setCategories} counts={counts} />
+        </div>
+      )}
+
+      <ListPanel
+        snap={snap}
+        onSnapChange={setSnap}
+        desktop={desktop}
+        title={
+          /* 손잡이와 한 줄로 합쳤다. 예전에는 손잡이 44px + 헤더 64px 가 따로 서서
+             half 스냅에서 목록 본문이 111px 밖에 안 남았다(카드 한 장이 173px 인데). */
+          <header className="px-3 pb-1.5 pt-1 shrink-0 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <MapPin className="w-4 h-4 shrink-0 text-primary-fg" aria-hidden="true" />
+              <span className="font-bold text-sm text-fg">맛핀</span>
+              <span className="text-sm text-fg-muted truncate tabular-nums">
+                {filtered.length.toLocaleString()}곳
+                {scope === 'all' && !near ? ' · 전체' : ''}
+                {geocoding && <Loader2 className="inline w-3 h-3 ml-1 animate-spin" aria-label="검색 중" />}
+              </span>
+            </div>
+            <div className="flex items-center gap-0.5 shrink-0">
+              <button
+                type="button"
+                data-nodrag
+                onClick={pickRandom}
+                aria-label="아무 곳이나 고르기"
+                className="grid place-items-center w-9 h-9 rounded-lg text-fg-muted hover:bg-surface-pressed focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary transition-colors"
+              >
+                <Shuffle className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                data-nodrag
+                onClick={toggleColorScheme}
+                aria-label={colorScheme === 'dark' ? '밝은 화면으로 바꾸기' : '어두운 화면으로 바꾸기'}
+                className="grid place-items-center w-9 h-9 rounded-lg text-fg-muted hover:bg-surface-pressed focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary transition-colors"
+              >
+                {colorScheme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+              </button>
+            </div>
+          </header>
+        }
       >
-        <CategoryBar available={available} selected={categories} onChange={setCategories} counts={counts} />
-      </div>
-
-      <ListPanel snap={snap} onSnapChange={setSnap} desktop={desktop}>
-        <header className="px-4 py-2.5 bg-primary text-on-primary shrink-0 flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 min-w-0">
-            <MapPin className="w-4 h-4 shrink-0" aria-hidden="true" />
-            <span className="font-bold text-base">맛핀</span>
-            <span className="text-sm opacity-80 truncate tabular-nums">
-              {filtered.length.toLocaleString()}곳
-              {geocoding && <Loader2 className="inline w-3 h-3 ml-1 animate-spin" aria-label="검색 중" />}
-            </span>
-          </div>
-          <div className="flex items-center gap-0.5 shrink-0">
-            <button
-              type="button"
-              onClick={pickRandom}
-              aria-label="아무 곳이나 고르기"
-              className="grid place-items-center w-11 h-11 rounded-lg hover:bg-black/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-current transition-colors"
-            >
-              <Shuffle className="w-4 h-4" />
-            </button>
-            <button
-              type="button"
-              onClick={toggleColorScheme}
-              aria-label={colorScheme === 'dark' ? '밝은 화면으로 바꾸기' : '어두운 화면으로 바꾸기'}
-              className="grid place-items-center w-11 h-11 rounded-lg hover:bg-black/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-current transition-colors"
-            >
-              {colorScheme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-            </button>
-          </div>
-        </header>
-
         {detailPlace ? (
           <PlaceSheet
             place={detailPlace}
@@ -556,7 +591,19 @@ export default function App() {
               onRegionOpenChange={setRegionOpen}
               regionLabel={regionLabelOf(region)}
               total={places.length}
-            />
+              alwaysExpanded={desktop}
+            >
+              {!desktop && (
+                <div className="-mx-3">
+                  <CategoryBar
+                    available={available}
+                    selected={categories}
+                    onChange={setCategories}
+                    counts={counts}
+                  />
+                </div>
+              )}
+            </ListToolbar>
 
             {regionOpen && (
               <RegionPicker
@@ -617,7 +664,8 @@ export default function App() {
               />
             )}
 
-            {withScore > 0 && !ratingsLoading && (
+            {/* 수집 진행률. 모바일에서는 목록에서 28px 를 가져가는 값에 비해 덜 급하다. */}
+            {desktop && withScore > 0 && !ratingsLoading && (
               <p className="shrink-0 px-3 py-1.5 m-0 text-xs text-fg-subtle border-t border-line-subtle tabular-nums">
                 평점 수집 {withScore.toLocaleString()} / {places.length.toLocaleString()}곳
               </p>

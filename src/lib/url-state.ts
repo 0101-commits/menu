@@ -35,6 +35,13 @@ export interface AppState {
   all?: boolean;
   /** 발견 모드 */
   discover?: boolean;
+  /**
+   * 지도 중심. 검색 없이 지도만 끌어서 본 상태도 새로고침·공유로 복원하기 위한 것.
+   * 이게 없어서, 당겨서 새로고침이 걸리면 보던 자리를 통째로 잃고 처음부터 찾아야 했다.
+   */
+  c?: { lat: number; lng: number };
+  /** 지도 확대 단계(카카오 level). 중심만 복원하면 배율이 달라 다른 동네처럼 보인다. */
+  z?: number;
 }
 
 const SORTS: SortKey[] = ['distance', 'rating', 'reviews'];
@@ -46,6 +53,12 @@ export function readUrl(search: string = window.location.search): AppState {
     return Number.isFinite(v) && v > 0 ? v : undefined;
   };
   const sort = p.get('sort');
+  const pair = (k: string) => {
+    const v = (p.get(k) ?? '').split(',').map(Number);
+    return v.length === 2 && Number.isFinite(v[0]) && Number.isFinite(v[1])
+      ? { lat: v[0], lng: v[1] }
+      : undefined;
+  };
   const ll = (p.get('ll') ?? '').split(',').map(Number);
   return {
     near: p.get('near') || undefined,
@@ -62,6 +75,8 @@ export function readUrl(search: string = window.location.search): AppState {
     place: p.get('place') || undefined,
     all: p.get('all') === '1' || undefined,
     discover: p.get('discover') === '1' || undefined,
+    c: pair('c'),
+    z: num('z'),
   };
 }
 
@@ -78,6 +93,9 @@ export function toSearch(s: AppState): string {
   if (s.place) p.set('place', s.place);
   if (s.all) p.set('all', '1');
   if (s.discover) p.set('discover', '1');
+  // 소수점 5자리면 약 1m 다. 더 적으면 주소가 길어지기만 한다.
+  if (s.c) p.set('c', `${s.c.lat.toFixed(5)},${s.c.lng.toFixed(5)}`);
+  if (s.z) p.set('z', String(s.z));
   const q = p.toString();
   return q ? `?${q}` : window.location.pathname;
 }
