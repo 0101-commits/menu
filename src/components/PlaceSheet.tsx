@@ -80,7 +80,7 @@ export function PlaceSheet({
         </button>
       </header>
 
-      <div className="flex-1 overflow-y-auto px-4 pb-4 pt-3">
+      <div className="flex-1 overflow-y-auto overscroll-contain px-4 pb-4 pt-3">
         {rank && (
           <p className="m-0 mb-3 inline-block text-xs font-medium text-primary-fg bg-primary-weak px-2.5 py-1 rounded-full">
             {rank}

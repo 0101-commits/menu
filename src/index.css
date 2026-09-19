@@ -7,6 +7,19 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer base {
+  /* 모바일 브라우저의 "당겨서 새로고침" 을 끈다.
+   *
+   * 시트를 올리려고 목록을 잡아 당기면 브라우저가 새로고침을 해버렸다. 그러면 지도 위치도,
+   * 열어 둔 가게도 다 사라져 처음부터 다시 찾아야 한다 — 앱 안의 어떤 조작보다 손해가 컸다.
+   * 스크롤 컨테이너마다 overscroll-contain 을 걸어도 문서 자체의 오버스크롤은 남으므로
+   * 여기서 한 번에 막는다. */
+  html,
+  body {
+    overscroll-behavior-y: none;
+  }
+}
+
 @layer utilities {
   /* 칩 바가 쓰던 클래스인데 Tailwind 기본에도 플러그인에도 없어서 그동안 아무 효과가 없었다.
      가로 스크롤은 남기고 막대만 숨긴다. */
