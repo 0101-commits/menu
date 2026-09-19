@@ -32,3 +32,6 @@ reports/
 
 # tsc -b 산출물
 *.tsbuildinfo
+
+# 로컬 백업
+.bak/

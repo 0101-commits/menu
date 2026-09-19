@@ -18,6 +18,7 @@
 //   node scripts/ratings.mjs --shard=1/4          4등분 중 1번째 (CI 주간 롤링용)
 //   node scripts/ratings.mjs --refresh=30         30일보다 오래된 것도 다시 받기
 //   node scripts/ratings.mjs --force              --refresh 무시하고 전량 재수집
+//   node scripts/ratings.mjs --missing=hours      영업시간이 비어 있는 곳만 (재수집 주기 무시)
 
 import fs from 'node:fs';
 import { readPlaces, readJson, writeJson, sleep, args } from './lib/places-io.mjs';
@@ -66,9 +67,25 @@ const isFresh = (entry) => entry?.at && Date.parse(entry.at) > cutoff;
 // 실패로 남은 것만 다시 받는다. 파서를 고친 뒤 재분류할 때 쓴다.
 const failed = (e) => Boolean(e?.error || e?.parseError);
 
+// 특정 필드가 빈 곳만 고른다. 전량 재수집이 현실적이지 않을 때 쓴다 —
+// 네이버는 레이트리밋 때문에 4,084곳이 14시간이 걸린다(실측: 30초 백오프가 전체의 92%).
+// 판단 기준은 이미 내보낸 public/data/ratings.json 이다. 그게 지금 화면에 보이는 상태다.
+const MISSING = A.missing;
+const published = MISSING ? readJson('public/data/ratings.json', {}) : {};
+const lacks = (sid) => {
+  const e = published[sid];
+  if (MISSING === 'hours') return !e?.hours?.length;
+  if (MISSING === 'menus') return !e?.menus?.length;
+  if (MISSING === 'score') return !(e?.naver?.score ?? e?.kakao?.score);
+  throw new Error(`--missing 값이 이상합니다: ${MISSING} (hours | menus | score)`);
+};
+
 let targets = places.filter((p) => {
   const cur = store[p.placeId];
   if (A['retry-failed']) return failed(cur?.naver) || (p.kakaoId && failed(cur?.kakao));
+  // --missing 은 재수집 주기를 보지 않는다. 주기로 거르면 이미 받아 둔(그러나 그 필드가 빈)
+  // 곳이 전부 걸러져 대상이 0건이 된다.
+  if (MISSING) return lacks(p.placeId);
   const needNaver = SOURCE !== 'kakao' && !isFresh(cur?.naver);
   const needKakao = SOURCE !== 'naver' && p.kakaoId && !isFresh(cur?.kakao);
   return needNaver || needKakao;
@@ -83,7 +100,7 @@ if (A.limit) targets = targets.slice(0, Number(A.limit));
 
 const withKakaoId = places.filter((p) => p.kakaoId).length;
 console.log(`장소 ${places.length}건 (kakaoId 보유 ${withKakaoId}건) · 이미 받은 것 ${Object.keys(store).length}건`);
-console.log(`대상 ${targets.length}건 · 소스 ${SOURCE} · 간격 ${DELAY}ms · 예상 ${Math.ceil((targets.length * DELAY) / 60000)}분`);
+console.log(`대상 ${targets.length}건${MISSING ? ` (${MISSING} 결측분만)` : ''} · 소스 ${SOURCE} · 간격 ${DELAY}ms · 예상 ${Math.ceil((targets.length * DELAY) / 60000)}분`);
 
 const stat = { naverOk: 0, naverNull: 0, naverErr: 0, kakaoOk: 0, kakaoErr: 0, gone: 0, parseErr: 0 };
 let done = 0;
@@ -94,8 +111,8 @@ for (const p of targets) {
   const cur = (store[p.placeId] ??= { name: p.name });
   const now = new Date().toISOString();
 
-  const wantNaver = A['retry-failed'] ? failed(cur.naver) : !isFresh(cur.naver);
-  const wantKakao = A['retry-failed'] ? failed(cur.kakao) : !isFresh(cur.kakao);
+  const wantNaver = MISSING ? true : A['retry-failed'] ? failed(cur.naver) : !isFresh(cur.naver);
+  const wantKakao = MISSING ? true : A['retry-failed'] ? failed(cur.kakao) : !isFresh(cur.kakao);
 
   if (SOURCE !== 'kakao' && wantNaver) {
     const r = await withRetry(() => getNaver(p.placeId), 'naver');
