@@ -35,3 +35,6 @@ reports/
 
 # 로컬 백업
 .bak/
+
+# wrangler 빌드 산출물
+worker/.wrangler/
