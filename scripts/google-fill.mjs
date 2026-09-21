@@ -10,6 +10,13 @@
 // 그 뒤로 1,000건당 $20 다(rating·userRatingCount·priceLevel 이 전부 이 등급 필드라
 // 더 싼 등급으로 내려갈 방법이 없다).
 //
+// 이 스크립트는 **초기 시드 전용**이다. 이후 갱신은 워커의 cron(scheduled)이
+// 가장 오래된 것부터 매일 조금씩 돌린다 — wrangler.toml [triggers] 참고.
+//
+// raw/google.json 은 **로컬 재개용 원장**이다. 중간에 끊겨도 이미 받은 곳을 건너뛰기
+// 위한 것이고, CI 는 이 파일을 쓰지도 복원하지도 않는다(그렇게 했더니 Actions 캐시가
+// 7일에 축출돼 매달 같은 앞쪽 1,000건에 반복 과금했다).
+//
 // 사용:
 //   node scripts/google-fill.mjs                  안 받은 것 중 1,000건 (무료 한도)
 //   node scripts/google-fill.mjs --all --yes      전량. 유료 구간에 들어가므로 --yes 필수
@@ -21,7 +28,6 @@
 import fs from 'node:fs';
 import { readPlaces, readJson, writeJson, sleep, args } from './lib/places-io.mjs';
 import { fetchGoogle } from '../shared/parse-place.mjs';
-import { toAggregate } from './lib/google-aggregate.mjs';
 
 const LEDGER = 'raw/google.json';
 const BULK = 'raw/google-kv.json';
@@ -117,27 +123,27 @@ for (const [i, p] of targets.entries()) {
 
 writeJson(LEDGER, ledger);
 
-// wrangler 가 읽는 대량 업로드 형식. 값에 TTL 을 주지 않는다 —
-// 주면 30일 뒤 사라지고, 다시 채우는 데 매달 $52 가 든다.
+// wrangler 가 읽는 대량 업로드 형식(항목마다 metadata 를 받는다 — wrangler 4.135 실측).
 //
-// 두 가지를 같이 올린다.
-//   g:{구글 place ID}  상세 화면이 한 곳을 열 때 쓴다
-//   g:all              목록이 한 번에 받아 가는 덩어리. 네이버 place ID 로 키를 다시 잡는다.
-//                      장소마다 KV 를 읽으면 목록 한 번에 3,613번 읽기가 되기 때문이다.
-const aggregate = toAggregate(places, ledger);
-const bulk = [
-  ...Object.entries(ledger)
-    .filter(([, v]) => !v.gone)
-    .map(([gid, v]) => ({ key: `g:${gid}`, value: JSON.stringify(v) })),
-  { key: 'g:all', value: JSON.stringify(aggregate) },
-];
+// 값에 TTL 을 주지 않는다. 주면 30일 뒤 사라지고 다시 채우는 데 매달 $52 가 든다.
+// 대신 metadata.at 에 수집 시각을 박는다. 워커의 cron 이 list() 로 metadata 만 읽어
+// "가장 오래된 것부터" 고르는 색인이 이것이다(값을 3,613번 읽지 않아도 된다).
+//
+// 폐업한 곳도 올린다. 안 올리면 첫 방문자가 죽은 장소 하나에 또 돈을 쓴다.
+// 다만 90일 뒤 자동으로 빠지게 둔다 — 일시적 404 한 번에 영영 안 뜨면 안 된다.
+const GONE_TTL = 90 * 86400;
+const bulk = Object.entries(ledger).map(([gid, v]) => ({
+  key: `g:${gid}`,
+  value: JSON.stringify(v),
+  metadata: { at: v.at, ...(v.gone ? { gone: true } : {}) },
+  ...(v.gone ? { expiration_ttl: GONE_TTL } : {}),
+}));
 
 fs.mkdirSync('raw', { recursive: true });
 fs.writeFileSync(BULK, JSON.stringify(bulk));
 
 console.log(`\n완료 · 성공 ${ok} · 없어짐 ${gone} · 실패 ${err}`);
-console.log(`${LEDGER} — ${Object.keys(ledger).length}건`);
+console.log(`${LEDGER} — ${Object.keys(ledger).length}건 (로컬 재개용. 커밋하지 않는다)`);
 console.log(`${BULK} — KV 에 올릴 ${bulk.length}건 (${(fs.statSync(BULK).size / 1024).toFixed(0)}KB)`);
-console.log(`  그중 목록용 g:all — ${Object.keys(aggregate).length}곳 (${(JSON.stringify(aggregate).length / 1024).toFixed(0)}KB)`);
 console.log('\n올리기 (worker 폴더에서):');
 console.log(`  npx wrangler kv bulk put ../${BULK} --binding RATINGS --remote`);

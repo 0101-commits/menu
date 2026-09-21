@@ -11,8 +11,7 @@
 import assert from 'node:assert/strict';
 import { parseRegion } from './lib/region.mjs';
 import { parseNaver, parseKakao } from '../shared/parse-place.mjs';
-import { judge, norm } from './lib/match-rules.mjs';
-import { toAggregate } from './lib/google-aggregate.mjs';
+import { judge, norm, distanceM, nameMatch, verifyVerdict } from './lib/match-rules.mjs';
 
 // src/lib 의 .ts 를 그대로 읽는다. Node 22.18+ 부터 타입을 벗겨 실행한다.
 // 그보다 낮으면 ERR_UNKNOWN_FILE_EXTENSION 만 뜨고 원인이 안 보인다.
@@ -390,36 +389,36 @@ it('네이버: 사라진 장소는 폐업으로 분류한다', () => {
   assert.deepEqual(parseNaver(html, '123'), { gone: true });
 });
 
-it('구글 집계: 네이버 place ID 로 키를 다시 잡는다', () => {
-  // 원장은 구글 place ID 로, 앱은 네이버 place ID 로 찾는다. 이 변환이 어긋나면
-  // 평점이 엉뚱한 가게에 붙는데 화면에서는 멀쩡해 보인다.
-  const places = [
-    { placeId: 'n1', googlePlaceId: 'g1' },
-    { placeId: 'n2', googlePlaceId: 'g2' },
-    { placeId: 'n3' }, // 구글 미매칭
-  ];
-  const ledger = {
-    g1: { score: 4.5, count: 120, price: 2, at: '2026-09-18T00:00:00Z' },
-    g2: { score: 4.1, count: 8, at: '2026-09-18T00:00:00Z' },
-  };
-  assert.deepEqual(toAggregate(places, ledger), {
-    n1: { score: 4.5, count: 120, price: 2 },
-    n2: { score: 4.1, count: 8 },
-  });
+// ---------- 붙은 매칭 되재기 (구글 3열 게이트) ----------
+// 여기서 헐거우면 다른 가게의 구글 평점을 이 가게 것으로 내보낸다. 없는 것보다 나쁘다.
+
+it('되재기: 덧붙은 이름은 같은 가게로 본다', () => {
+  assert.equal(nameMatch('기태만두', '기태만두Gitae'), true);
+  assert.equal(nameMatch('백나예김밥 효자촌서현점', '백나예김밥'), true);
+  assert.equal(nameMatch('보슬보슬', '보슬보슬 역삼본점(restaurants)'), true);
 });
 
-it('구글 집계: 사라진 곳은 빼고, 점수 없는 곳은 남긴다', () => {
-  // gone 을 남기면 화면이 "평점 없는 가게" 로 그린다. 반대로 점수가 null 인 곳은
-  // 받아는 봤다는 뜻이라 남겨야 "수집 전" 과 구분해 적을 수 있다.
-  const places = [
-    { placeId: 'n1', googlePlaceId: 'g1' },
-    { placeId: 'n2', googlePlaceId: 'g2' },
-  ];
-  const ledger = {
-    g1: { gone: true, at: '2026-09-18T00:00:00Z' },
-    g2: { score: null, count: 0, at: '2026-09-18T00:00:00Z' },
-  };
-  assert.deepEqual(toAggregate(places, ledger), { n2: { score: null, count: 0 } });
+it('되재기: 다른 상호는 안 붙인다', () => {
+  assert.equal(nameMatch('자매수산', '형제수산'), false);
+  assert.equal(nameMatch('맛짱분식', ''), false);
+  // 앞 두 글자만 겹치는 건 상호가 같다는 근거가 못 된다.
+  assert.equal(nameMatch('김밥천국', '김밥나라해장국집'), false);
+});
+
+it('되재기: 이름·좌표 중 하나만 맞으면 사람이 본다', () => {
+  assert.equal(verifyVerdict(true, 20), 'ok');
+  assert.equal(verifyVerdict(true, 900), 'suspect');   // 이름은 같은데 멀다
+  assert.equal(verifyVerdict(false, 10), 'suspect');   // 자리는 같은데 이름이 다르다
+  assert.equal(verifyVerdict(false, 900), 'mismatch');
+  // 좌표를 못 받은 건(null)은 "가깝다" 로 봐주면 안 된다.
+  assert.equal(verifyVerdict(true, null), 'suspect');
+});
+
+it('되재기: 거리는 미터로 나온다', () => {
+  // 강남역 ↔ 역삼역은 실측 약 800m 다. 단위를 km 로 잘못 쓰면 150m 게이트가 통째로 무력해진다.
+  const d = distanceM(37.497942, 127.027621, 37.500622, 127.036456);
+  assert.ok(d > 700 && d < 950, `${d}m`);
+  assert.equal(Math.round(distanceM(37.5, 127.0, 37.5, 127.0)), 0);
 });
 
 it('카카오: 점수·가격·영업시간·랭킹을 집는다', () => {

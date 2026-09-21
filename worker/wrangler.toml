@@ -1,30 +1,59 @@
 # 온디맨드 평점 Worker.
 #
-# 배포 (이 폴더에서 실행한다 — cd worker)
+# ⚠ 이 워커를 고쳤으면 **손으로 배포해야 한다.** CI 는 워커를 배포하지 않는다
+#   (레포에 CLOUDFLARE_API_TOKEN 이 없다 — 실행될 수 없는 워크플로는 부채라 만들지 않았다).
+#
+#   cd worker && npx wrangler deploy
+#
+#   배포 확인:
+#     curl -H "Origin: https://0101-commits.github.io" https://<배포주소>/health
+#     → {"ok":true,"google":true,"routes":["/","/google","/health"],"builtAt":"..."}
+#     builtAt 이 index.js 의 BUILT_AT 과 다르면 옛 배포본이 떠 있는 것이다.
+#     (Origin 헤더 없이 부르면 403 이다 — 다른 라우트와 같은 규칙이다.)
+#
+# 처음 세팅
 #   0) 로그인          npx wrangler login
 #   1) KV 만들기        npx wrangler kv namespace create RATINGS
 #      출력된 id 를 아래 kv_namespaces 의 id 에 넣는다.
 #   2) 구글 키(선택)    npx wrangler secret put GOOGLE_PLACES_KEY
-#      넣지 않으면 구글 칸만 꺼지고 네이버·카카오는 그대로 된다.
+#      넣지 않으면 구글 칸만 꺼지고 네이버·카카오는 그대로 된다. cron 도 조용히 쉰다.
 #   3) 배포             npx wrangler deploy
 #   4) 앱에 연결        레포 Settings > Secrets and variables > Actions > Variables 에
 #                       VITE_RATINGS_API = https://<배포주소>/
 #                       구글까지 쓰면 VITE_GOOGLE_RATINGS = 1
 #
-# 무료 요금제로 충분하다(하루 100,000 요청, KV 읽기 100,000/일).
+# 무료 요금제로 충분하다(하루 100,000 요청, KV 읽기 100,000/일, Cron Trigger 포함).
 
 name = "matpin-ratings"
 main = "index.js"
 compatibility_date = "2026-09-01"
 
+# 매일 03:30 KST(18:30 UTC). 가장 오래된 구글 값부터 DAILY_REFRESH 건을 다시 받는다.
+# 월 1회 전량 갱신은 못 쓴다 — 3,613곳이면 무료 한도(월 1,000)의 세 배다.
+# 매일 조금씩 돌리면 약 넉 달에 한 바퀴가 돌고, 어떤 값도 그보다 낡지 않는다.
+# ⚠ 이 계정은 Workers 무료 요금제의 cron trigger 5개를 이미 다 쓰고 있다.
+# 실제 배포에서 code 10072 로 거절됐다(워커 코드는 올라가고 트리거만 실패한다).
+# 그래서 갱신은 크론이 아니라 **본 순간**에 붙였다 — /google?ids= 가 낡은 값을 돌려줄 때
+# 그중 몇 건을 뒤에서 다시 받는다(worker/index.js 의 refreshSome).
+# 유료 요금제로 올리거나 다른 워커의 크론을 하나 비우면 아래 두 줄을 살리면 된다.
+# [triggers]
+# crons = ["30 18 * * *"]
+
 [vars]
 # 이 주소에서 온 요청만 받는다. 비워 두면 전부 403 이다(열리지 않는다).
 ALLOWED_ORIGINS = "https://0101-commits.github.io,http://localhost:5173"
 
-# 하루 상한. 구글만 돈이 든다 — 30 × 30일 = 900 으로 무료 한도(월 1,000) 안에 둔다.
+# 구글 하루 상한. **온디맨드와 롤링 갱신이 이 한 개를 나눠 쓴다.**
+# 33 × 30일 = 990 으로 무료 한도(월 1,000) 안이다.
+# cron 은 18:30 UTC 에 돌아 그날 남은 몫만 쓴다 — 사용자가 먼저, 갱신이 나중이다.
 # 다만 KV 카운터는 동시 요청에서 정확하지 않다. 요금의 진짜 상한은
 # Google Cloud 콘솔 > API 및 서비스 > 할당량에서 Place Details 일일 한도로 걸어야 한다.
-DAILY_GOOGLE_LIMIT = "30"
+DAILY_GOOGLE_LIMIT = "33"
+DAILY_REFRESH = "33"
+# 며칠 지난 값을 "낡았다" 로 볼지. 본 순간 갱신의 기준이다.
+REFRESH_AFTER_DAYS = "30"
+# 한 번의 목록 조회에서 뒤에서 새로 받을 최대 건수.
+VIEW_REFRESH_MAX = "5"
 DAILY_NAVER_LIMIT = "500"
 DAILY_KAKAO_LIMIT = "500"
 

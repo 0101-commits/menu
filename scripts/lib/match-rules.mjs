@@ -57,3 +57,42 @@ export function judge(place, candName, dist) {
   if (lcp >= 3 && dist <= 25) return 'medium';
   return null;
 }
+
+// ---------- 붙은 매칭이 맞는지 되재는 쪽 ----------
+// 위는 "붙일까" 를 정하고, 아래는 이미 붙은 것을 표본으로 "맞나" 를 되잰다.
+// scripts/google-verify-match.mjs 의 게이트가 이 판정을 쓴다.
+
+/** 두 지점 사이 미터. 지구를 구로 본다(하버사인) — 수백 미터 규모에서는 오차가 무의미하다. */
+export function distanceM(lat1, lng1, lat2, lng2) {
+  const R = 6371000;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+/**
+ * 이름이 같은 가게를 가리키는가. judge() 와 달리 거리를 안 본다 — 거리는 따로 센다.
+ *
+ * 구글 한국 등록명에는 외국어·업종어가 덧붙고("기태만두Gitae饺子") 우리 쪽에는 지점명이
+ * 붙는다("백나예김밥 효자촌서현점"). 완전 일치를 요구하면 멀쩡한 매칭이 전부 떨어진다.
+ */
+export function nameMatch(ours, theirs) {
+  const a = norm(ours);
+  const b = norm(theirs);
+  if (!a || !b) return false;
+  if (a === b || a.includes(b) || b.includes(a)) return true;
+  // 앞에서 3글자 이상 겹치고 그게 짧은 쪽의 절반을 넘으면 같은 상호로 본다.
+  const lcp = commonPrefix(a, b);
+  return lcp >= 3 && lcp >= Math.min(a.length, b.length) / 2;
+}
+
+/** 이름·좌표 둘 다 맞으면 ok, 하나만 맞으면 suspect(사람이 본다), 둘 다 아니면 mismatch. */
+export function verifyVerdict(nameOk, dist, nearM = 150) {
+  const nearOk = typeof dist === 'number' && dist <= nearM;
+  if (nameOk && nearOk) return 'ok';
+  if (!nameOk && !nearOk) return 'mismatch';
+  return 'suspect';
+}

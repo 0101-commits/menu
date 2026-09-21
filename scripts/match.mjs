@@ -26,7 +26,7 @@
 
 import fs from 'node:fs';
 import { readPlaces, readJson, writeJson, sleep, args } from './lib/places-io.mjs';
-import { judge } from './lib/match-rules.mjs';
+import { distanceM, judge } from './lib/match-rules.mjs';
 
 const OUT = 'raw/match.json';
 const A = args();
@@ -46,15 +46,6 @@ if (!KAKAO_KEY && SOURCE !== 'google') {
   process.exit(1);
 }
 
-function distanceM(lat1, lng1, lat2, lng2) {
-  const R = 6371000;
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLng = ((lng2 - lng1) * Math.PI) / 180;
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
 
 // 우리 대분류 ↔ 카카오 category_name 1단계. 30m 이내 근접 매칭의 보조 판정에만 쓴다.
 const COARSE = {

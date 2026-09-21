@@ -95,14 +95,57 @@ GitHub Pages 로 내보낸다. 주소는 `https://0101-commits.github.io/menu/`.
 
 하위 경로 배포라 `vite.config.ts` 의 `base` 가 `/menu/` 다. 다른 곳에 올릴 때는 `VITE_BASE` 로 덮는다.
 
-### 온디맨드 평점 (선택)
+### 온디맨드 평점 Worker
 
 `worker/` 의 Cloudflare Worker 를 띄우면 두 가지가 켜진다.
 
 - **주변 발견**의 미저장 가게 평점 (브라우저는 네이버·카카오 플레이스를 직접 못 부른다 — CORS)
-- **구글 평점 칸** (구글은 정책상 30일 넘게 저장할 수 없어 미리 채울 수 없다)
+- **구글 평점 칸**
 
-없어도 앱은 그대로 돈다. 이 두 가지만 꺼진다. 배포법은 [`worker/wrangler.toml`](worker/wrangler.toml) 주석.
+없어도 앱은 그대로 돈다. 이 두 가지만 꺼진다.
+
+**워커를 고치면 손으로 배포해야 한다. CI 는 워커를 배포하지 않는다** — 레포에
+`CLOUDFLARE_API_TOKEN` 이 없고, 실행될 수 없는 워크플로는 부채이므로 만들지 않았다.
+
+```bash
+cd worker && npx wrangler deploy
+curl -H "Origin: https://0101-commits.github.io" https://<배포주소>/health
+```
+
+`/health` 의 `builtAt` 이 `worker/index.js` 의 `BUILT_AT` 과 다르면 옛 배포본이 떠 있는 것이다
+(구글 칸이 안 뜨던 원인이 매번 이것이었다). 처음 세팅은
+[`worker/wrangler.toml`](worker/wrangler.toml) 머리말 주석.
+
+| 라우트 | 하는 일 |
+|---|---|
+| `GET /?n=&k=&g=` | 한 곳을 그때그때 조회. 캐시에 없으면 실제로 부른다 |
+| `GET /google?ids=a,b,c` | 이미 받아 둔 구글 값만 돌려준다. **구글 API 를 안 부른다(요금 0).** 한 번에 60개, 키는 구글 place ID |
+| `GET /health` | 배포본 표식·구글 키 유무. 키 값은 안 준다 |
+
+#### 구글 평점을 채우고 굴리는 법
+
+값은 KV 에만 둔다(`g:{구글 place ID}`). 공개 레포에 넣지 않는다 — 구글 약관이
+Places API 에서 캐시를 허용한 건 위경도뿐이다.
+
+1. **매칭 검증 (게이트).** ID 가 엉뚱한 가게에 붙어 있으면 결과는 "평점 없음" 이 아니라
+   **다른 가게의 평점**이다. 켜기 전에 표본 50곳을 재고, 오류율 5% 초과면 멈춘다.
+   ```bash
+   npm run google:verify -- --dry          # 표본만 뽑아 본다
+   GOOGLE_PLACES_KEY=... npm run google:verify
+   ```
+   결과는 `reports/google-match-sample.md` (gitignore — 판정은 문서에 옮겨 적는다).
+   평점 필드를 안 받으므로 Place Details **Pro**(월 5,000건 무료)로 과금된다.
+   평점용 Enterprise 한도(월 1,000)를 쓰지 않는다.
+2. **초기 시드.** `npm run google:fill -- --all --yes` → `raw/google-kv.json` →
+   `cd worker && npx wrangler kv bulk put ../raw/google-kv.json --binding RATINGS --remote`.
+   `raw/google.json` 은 **로컬 재개용 원장**이다(중단 후 재실행 시 건너뛰기용).
+3. **갱신.** 워커의 **Cron Trigger** 가 매일 03:30 KST 에 `metadata.at` 이 가장 오래된
+   `DAILY_REFRESH` 건만 다시 받는다. 3,613곳이면 약 넉 달에 한 바퀴다.
+   값에 TTL 은 없다(영구 보관). 폐업 표시만 90일 뒤 빠진다.
+   온디맨드와 cron 이 `DAILY_GOOGLE_LIMIT` 하나를 나눠 쓴다 — 합쳐서 월 1,000건 안이다.
+
+옛 `google-refresh.yml` 은 삭제했다. 원장을 Actions 캐시(7일 축출)에서 복원하는데 크론은
+30일 간격이라, 매달 빈 원장으로 시작해 **같은 앞쪽 1,000건에 반복 과금**하는 구조였다.
 
 ## 디자인
 
