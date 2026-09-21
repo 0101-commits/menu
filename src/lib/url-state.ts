@@ -42,6 +42,11 @@ export interface AppState {
   c?: { lat: number; lng: number };
   /** 지도 확대 단계(카카오 level). 중심만 복원하면 배율이 달라 다른 동네처럼 보인다. */
   z?: number;
+  /**
+   * 지도를 움직일 때 목록도 따라갈지. 기본은 따라간다(켬) — 주소에는 껐을 때만 `follow=0` 로 적는다.
+   * 구글 지도의 "지도 이동 시 결과 업데이트" 체크박스와 같은 손잡이다.
+   */
+  follow?: boolean;
 }
 
 const SORTS: SortKey[] = ['distance', 'rating', 'reviews'];
@@ -77,6 +82,8 @@ export function readUrl(search: string = window.location.search): AppState {
     discover: p.get('discover') === '1' || undefined,
     c: pair('c'),
     z: num('z'),
+    // 없으면 켬. 껐을 때만 주소에 남긴다.
+    follow: p.get('follow') === '0' ? false : undefined,
   };
 }
 
@@ -96,6 +103,7 @@ export function toSearch(s: AppState): string {
   // 소수점 5자리면 약 1m 다. 더 적으면 주소가 길어지기만 한다.
   if (s.c) p.set('c', `${s.c.lat.toFixed(5)},${s.c.lng.toFixed(5)}`);
   if (s.z) p.set('z', String(s.z));
+  if (s.follow === false) p.set('follow', '0');
   const q = p.toString();
   return q ? `?${q}` : window.location.pathname;
 }

@@ -63,19 +63,33 @@ export function fetchRatings(q: RatingQuery): Promise<Ratings> {
   return p;
 }
 
+/** 한 요청에 물을 수 있는 구글 place ID 수. 워커의 상한과 같아야 한다. */
+const IDS_MAX = 60;
+
 /**
- * 목록용 구글 평점 한 덩어리. 키는 네이버 place ID 다.
+ * 목록에 지금 그려진 가게들의 구글 평점을 한 번에 받는다. 키는 **구글** place ID 다.
  *
- * 장소마다 부르면 목록 한 번에 수천 번 요청이 된다. Worker 가 미리 채워 둔 것을
- * KV 키 하나로 들고 있다가 그대로 준다 — 이 경로는 구글 API 를 절대 부르지 않으므로
- * 요금이 붙지 않고, 채워진 만큼만 온다(아직 안 채웠으면 빈 객체다).
+ * 워커는 네이버↔구글 매핑을 모른다. 그 변환은 앱이 places.json 으로 이미 할 수 있으므로
+ * 여기서는 구글 ID 를 그대로 주고받는다.
  *
+ * 이 경로는 구글 API 를 절대 부르지 않는다 — KV 에 이미 있는 것만 온다(요금 0).
  * 실패하면 빈 객체를 준다. 구글 칸은 없어도 되는 정보라 앱을 멈출 이유가 없다.
  */
-export function fetchGoogleAll(): Promise<Record<string, GoogleRating>> {
-  if (!RATINGS_API || !GOOGLE_ENABLED) return Promise.resolve({});
-  const url = new URL('google', RATINGS_API.endsWith('/') ? RATINGS_API : `${RATINGS_API}/`);
-  return fetch(url, { signal: AbortSignal.timeout(15000) })
-    .then((r) => (r.ok ? (r.json() as Promise<Record<string, GoogleRating>>) : {}))
-    .catch(() => ({}));
+export async function fetchGoogleByIds(gids: string[]): Promise<Record<string, GoogleRating>> {
+  if (!RATINGS_API || !GOOGLE_ENABLED || !gids.length) return {};
+  const base = RATINGS_API.endsWith('/') ? RATINGS_API : `${RATINGS_API}/`;
+  const out: Record<string, GoogleRating> = {};
+
+  for (let i = 0; i < gids.length; i += IDS_MAX) {
+    const url = new URL('google', base);
+    url.searchParams.set('ids', gids.slice(i, i + IDS_MAX).join(','));
+    try {
+      const res = await fetch(url, { signal: AbortSignal.timeout(15000) });
+      if (!res.ok) continue;
+      Object.assign(out, (await res.json()) as Record<string, GoogleRating>);
+    } catch {
+      // 한 묶음이 실패해도 나머지는 받는다. 칸은 "수집 전" 으로 남고 다음 조회에 다시 시도된다.
+    }
+  }
+  return out;
 }

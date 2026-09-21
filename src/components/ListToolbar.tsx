@@ -47,6 +47,10 @@ interface Props {
 
   unvisitedOnly: boolean;
   onUnvisitedOnlyChange: (v: boolean) => void;
+
+  /** 지도를 움직이면 목록도 따라갈지. 끄면 목록이 얼고 지도에 "이 지역에서 다시 찾기" 가 뜬다 */
+  follow: boolean;
+  onFollowChange: (v: boolean) => void;
   /** 현위치 1km · 영업 중 · 평점순을 한 번에 건다 */
   onPickNow: () => void;
 
@@ -87,7 +91,7 @@ export function ListToolbar({
   nearLabel, radius, onRadiusChange, onClearNear,
   openOnly, onOpenOnlyChange, openOnlyAvailable, minScore, onMinScoreChange,
   sort, onSortChange, canSortDistance, discover, onDiscoverChange,
-  unvisitedOnly, onUnvisitedOnlyChange, onPickNow,
+  unvisitedOnly, onUnvisitedOnlyChange, onPickNow, follow, onFollowChange,
   regionOpen, onRegionOpenChange, regionLabel, total,
   alwaysExpanded = false, children,
 }: Props) {
@@ -229,6 +233,15 @@ export function ListToolbar({
           title={openOnlyAvailable ? undefined : '영업시간 데이터가 아직 없습니다 (카카오 매칭 필요)'}
         >
           영업 중
+        </button>
+        <button
+          type="button"
+          onClick={() => onFollowChange(!follow)}
+          className={chip(!follow)}
+          aria-pressed={!follow}
+          title={follow ? '지도를 움직이면 목록도 바뀐다' : '목록이 지금 자리에 고정돼 있다'}
+        >
+          {follow ? '지도 따라감' : '목록 고정'}
         </button>
         <button
           type="button"

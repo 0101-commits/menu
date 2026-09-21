@@ -30,3 +30,16 @@ export async function loadRatings(): Promise<RatingsMap> {
     return {};
   }
 }
+
+/**
+ * 목록이 "같은 목록" 인지 가리는 서명.
+ *
+ * 지도를 조금만 밀어도 배열은 새 객체가 된다. 참조로 판단하면 그때마다 목록이
+ * 맨 위로 되감기고 더 보기 개수도 40 으로 돌아간다 — 지도를 한 번 미는 대가로
+ * 보던 자리를 잃는 셈이다. 개수와 양 끝 id 가 같으면 같은 목록으로 본다
+ * (가운데만 바뀌는 경우는 드물고, 틀려도 손해는 스크롤이 유지되는 것뿐이다).
+ */
+export function listSignature(places: Pick<Place, 'placeId'>[]): string {
+  if (!places.length) return '0';
+  return `${places.length}:${places[0].placeId}:${places[places.length - 1].placeId}`;
+}

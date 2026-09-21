@@ -9,7 +9,7 @@ import type { Place, Ratings } from '../types';
 import { BrandDot, brandName, type Brand } from './BrandDot';
 import { PlaceLinks } from './PlaceLinks';
 import { colorOf } from '../lib/categories';
-import { formatCount, formatPrice, formatScore, rankLabel, rawOf, scoreLabel, summarize, type SourceMeans } from '../lib/rating';
+import { agoLabel, formatCount, formatPrice, formatScore, rankLabel, rawOf, scoreLabel, summarize, type SourceMeans } from '../lib/rating';
 import { openStatus, todayIndex, seoulDay } from '../lib/hours';
 
 interface Props {
@@ -140,7 +140,27 @@ export function PlaceSheet({
             <p className="m-0 mt-2 text-xs text-fg-subtle">네이버 점수는 네이버 화면에 공개되지 않는 가게입니다</p>
           )}
           {googleEnabled && ratings?.google && (
-            <p className="m-0 mt-2 text-xs text-fg-subtle">구글 평점 제공: Google</p>
+            /* 귀속 표시는 의무다(Places 정책). 자체 제작 'G' 배지는 로고도 텍스트도 아니라
+               여기에 "Google Maps" 를 그대로 적고 그 지도로 가는 길을 함께 둔다.
+               수집 시각을 같이 적는 이유: 값을 무기한 보관하고 오래된 것부터 갱신하므로,
+               지금 보는 숫자가 며칠 전 것인지 사용자가 알아야 한다. */
+            <p className="m-0 mt-2 text-xs text-fg-subtle">
+              평점 출처 Google Maps
+              {ratings.google.at ? ` · ${agoLabel(ratings.google.at)} 기준` : ''}
+              {place.googlePlaceId && (
+                <>
+                  {' · '}
+                  <a
+                    href={`https://www.google.com/maps/place/?q=place_id:${place.googlePlaceId}`}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    className="underline hover:text-fg"
+                  >
+                    Google 지도에서 보기
+                  </a>
+                </>
+              )}
+            </p>
           )}
         </div>
 

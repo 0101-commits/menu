@@ -56,6 +56,11 @@ export interface GoogleRating {
   count: number;
   price?: number;
   open?: boolean;
+  /**
+   * 수집 시각(ISO). 구글 값만 이걸 갖는다 — 무기한 보관하고 오래된 것부터 갱신하는 구조라,
+   * 화면이 "언제 받은 값인지" 를 말할 수 있어야 한다. 없으면 갱신 전의 옛 값이다.
+   */
+  at?: string;
 }
 
 export interface Ratings {

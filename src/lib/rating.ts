@@ -172,3 +172,19 @@ export function formatCount(n: number | undefined): string {
 export function formatPrice(level: number | undefined): string | null {
   return level && level >= 1 && level <= 4 ? '₩'.repeat(level) : null;
 }
+
+/**
+ * "3일 전" 처럼 읽는 시점 표기. 구글 값은 무기한 보관하고 오래된 것부터 갱신하므로,
+ * 화면이 며칠 된 값인지 말해 주지 않으면 사용자는 오늘 값과 반년 전 값을 구분할 수 없다.
+ */
+export function agoLabel(iso: string): string {
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return '';
+  const days = Math.floor((Date.now() - t) / 86_400_000);
+  if (days <= 0) return '오늘';
+  if (days === 1) return '어제';
+  if (days < 30) return `${days}일 전`;
+  const months = Math.floor(days / 30);
+  if (months < 12) return `${months}개월 전`;
+  return `${Math.floor(days / 365)}년 전`;
+}

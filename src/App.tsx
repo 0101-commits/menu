@@ -16,13 +16,13 @@ import { ListToolbar } from './components/ListToolbar';
 import { RegionPicker, regionLabelOf } from './components/RegionPicker';
 import { ListPanel, sheetInset, useDesktop, type Snap } from './components/ListPanel';
 import type { Discovered, GoogleRating, Place, RatingsMap } from './types';
-import { loadPlaces, loadRatings } from './lib/data';
+import { listSignature, loadPlaces, loadRatings } from './lib/data';
 import { buildIndex, parseQuery, searchPlaces } from './lib/search';
 import { computeMeans, rawOf, summarize } from './lib/rating';
 import { haversine, distanceM } from './lib/geo';
 import { isOpenNow } from './lib/hours';
 import { discoverNearby, geocodePlace } from './lib/kakao';
-import { GOOGLE_ENABLED, RATINGS_API, fetchGoogleAll, fetchRatings } from './lib/worker';
+import { GOOGLE_ENABLED, RATINGS_API, fetchGoogleByIds, fetchRatings } from './lib/worker';
 import { readUrl, writeUrl, type SortKey } from './lib/url-state';
 import { useVisits } from './lib/visits';
 
@@ -47,8 +47,9 @@ export default function App() {
   // ---------- 데이터 ----------
   const [places, setPlaces] = useState<Place[]>([]);
   const [baseRatings, setBaseRatings] = useState<RatingsMap>({});
-  // 구글은 공개 데이터에 못 넣는다(약관). Worker 가 미리 채워 둔 것을 한 번에 받아 얹는다.
-  const [googleAll, setGoogleAll] = useState<Record<string, GoogleRating> | null>(null);
+  // 구글은 공개 데이터에 못 넣는다(약관). Worker KV 에 있는 것을,
+  // 목록에 실제로 그려진 가게에 한해 묶어서 받아 얹는다(키는 네이버 placeId).
+  const [googleById, setGoogleById] = useState<Record<string, GoogleRating>>({});
   const [dataState, setDataState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [ratingsLoading, setRatingsLoading] = useState(true);
 
@@ -78,6 +79,10 @@ export default function App() {
   const [focus, setFocus] = useState<MapFocus | null>(null);
   const [selectedPlace, setSelectedPlace] = useState<Place | null>(null);
   const [detailPlace, setDetailPlace] = useState<Place | null>(null);
+  // 지도를 움직이면 목록도 따라갈지. 끄면 목록이 그 자리에 얼고, 지도 위에 "이 지역에서 다시 찾기" 가 뜬다.
+  const [follow, setFollow] = useState(initial.follow !== false);
+  // follow 가 꺼진 동안 지도가 알려 준 최신 범위. 버튼을 눌러야 목록에 반영된다.
+  const [pendingView, setPendingView] = useState<Place[] | null>(null);
 
   // ---------- 발견 ----------
   const [discover, setDiscover] = useState(Boolean(initial.discover));
@@ -136,9 +141,6 @@ export default function App() {
       .then((r) => { if (alive) setBaseRatings(r); })
       .finally(() => { if (alive) setRatingsLoading(false); });
 
-    // 실패해도 빈 객체가 온다. 구글 칸이 없다고 앱이 멈출 이유는 없다.
-    fetchGoogleAll().then((g) => { if (alive) setGoogleAll(g); });
-
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -168,20 +170,44 @@ export default function App() {
 
   // 목록용 구글 값을 평점 맵에 얹는다. 상세를 열어 받은 값이 이미 있으면 그쪽이 최신이다.
   const ratings = useMemo(() => {
-    if (!googleAll || !Object.keys(googleAll).length) return baseRatings;
+    if (!Object.keys(googleById).length) return baseRatings;
     const next: RatingsMap = { ...baseRatings };
-    for (const [sid, g] of Object.entries(googleAll)) {
+    for (const [sid, g] of Object.entries(googleById)) {
       next[sid] = { ...next[sid], google: next[sid]?.google ?? g };
     }
     return next;
-  }, [baseRatings, googleAll]);
+  }, [baseRatings, googleById]);
+
+  // 화면에 실제로 그려진 카드만 묻는다.
+  //
+  // 예전에는 워커가 4,084곳치를 통짜 블롭(g:all)으로 들고 있다가 통째로 내려줬는데,
+  // 그 블롭을 채우려면 전량을 미리 받아 둬야 했다(그리고 그 길이 막혀 칸이 영영 비었다).
+  // 본 것만 묻는 쪽이 요금도 보관도 실제로 쓰는 만큼이다. 한 번 물은 ID 는 다시 묻지 않는다.
+  const askedGoogle = useRef(new Set<string>());
+  const requestGoogle = useCallback((batch: Place[]) => {
+    if (!GOOGLE_ENABLED) return;
+    const fresh = batch.filter((p) => p.googlePlaceId && !askedGoogle.current.has(p.googlePlaceId));
+    if (!fresh.length) return;
+    for (const p of fresh) askedGoogle.current.add(p.googlePlaceId!);
+    fetchGoogleByIds(fresh.map((p) => p.googlePlaceId!)).then((got) => {
+      if (!Object.keys(got).length) return;
+      setGoogleById((prev) => {
+        const next = { ...prev };
+        for (const p of fresh) {
+          const v = got[p.googlePlaceId!];
+          if (v) next[p.placeId] = v;
+        }
+        return next;
+      });
+    });
+  }, []);
 
   // 소스별 전체 평균. 구글이 얹히면 값이 달라지므로 맵이 바뀔 때마다 다시 센다.
   const means = useMemo(() => computeMeans(ratings), [ratings]);
 
   // 구글 칸을 목록에 세울지. 데이터가 실제로 왔을 때만 세운다 —
   // 늘 비는 칸을 세워 두면 카드 가로의 1/3 이 빈칸으로 남는다(그래서 한 번 걷어냈다).
-  const googleReady = Boolean(googleAll && Object.keys(googleAll).length);
+  const googleReady = Boolean(Object.keys(googleById).length);
 
   // ---------- 검색 ----------
   const index = useMemo(() => buildIndex(places), [places]);
@@ -380,7 +406,18 @@ export default function App() {
   }, [sort, canSortDistance]);
 
   // ---------- URL ----------
+  // 가게를 연 순간만 히스토리를 쌓는다. 그래야 뒤로가기가 목록으로 돌아온다 —
+  // 예전에는 전부 replace 라 히스토리가 한 칸도 안 늘었고(실측 14→14),
+  // 상세를 열어 둔 채 뒤로가기를 누르면 앱을 통째로 벗어났다.
+  const lastPlaceRef = useRef<string | undefined>(initial.place);
+  const pushedRef = useRef(false);
+
   useEffect(() => {
+    const place = detailPlace?.placeId;
+    const opened = Boolean(place) && place !== lastPlaceRef.current;
+    lastPlaceRef.current = place;
+    if (opened) pushedRef.current = true;
+    if (!place) pushedRef.current = false;
     writeUrl({
       near: near?.label,
       ll: near ? { lat: near.lat, lng: near.lng } : undefined,
@@ -396,28 +433,81 @@ export default function App() {
       // 지도 자리도 적는다. 지도는 'idle' 에서만 알려 주므로 손을 뗀 뒤 한 번씩만 바뀐다.
       c: mapCenter ?? undefined,
       z: mapLevel ?? undefined,
-    });
-  }, [near, radius, categories, textFilter, sort, openOnly, minScore, detailPlace, scope, discover, mapCenter, mapLevel]);
+      follow: follow ? undefined : false,
+    }, opened ? 'push' : 'replace');
+  }, [near, radius, categories, textFilter, sort, openOnly, minScore, detailPlace, scope, discover, mapCenter, mapLevel, follow]);
+
+  // 뒤로가기·앞으로가기. 주소가 진실이고 화면이 그걸 따라간다.
+  useEffect(() => {
+    const on = () => {
+      const s = readUrl();
+      const hit = s.place ? places.find((p) => p.placeId === s.place) ?? null : null;
+      lastPlaceRef.current = hit?.placeId;
+      setDetailPlace(hit);
+      if (hit) {
+        setSelectedPlace(hit);
+        if (!desktop) setSnap('full');
+      } else if (!desktop) {
+        setSnap((cur) => (cur === 'full' ? 'half' : cur));
+      }
+    };
+    window.addEventListener('popstate', on);
+    return () => window.removeEventListener('popstate', on);
+  }, [places, desktop]);
 
   // ---------- 조작 ----------
-  const handleSelect = useCallback((p: Place | null) => {
-    setSelectedPlace(p);
-    // 접혀 있으면 목록이 보이게 올리고, 전체로 펴져 있으면 지도가 보이게 내린다.
-    // full(92svh)에서는 지도에 남는 띠가 팝업(약 220px)보다 좁아 무엇을 골랐는지 못 본다.
-    if (p && !desktop && (snap === 'peek' || snap === 'full')) setSnap('half');
-  }, [desktop, snap]);
-
   const handleDetail = useCallback((p: Place) => {
     setSelectedPlace(p);
     setDetailPlace(p);
     if (!desktop) setSnap('full');
   }, [desktop]);
 
+  const handleSelect = useCallback((p: Place | null) => {
+    setSelectedPlace(p);
+    if (!p) return;
+    // 데스크톱은 마커 한 번 누르면 바로 상세다. 네이버·구글 PC 가 똑같이 한다 —
+    // 목록 패널은 그대로 남고 상세가 그 옆에 선다.
+    if (desktop) { setDetailPlace(p); return; }
+    // 모바일은 한 번 누르면 시트 맨 위 고른 카드까지, 그 카드를 다시 눌러야 상세다.
+    // 좁은 화면에서 1탭에 전체화면 상세로 가면 지도에서 고른 맥락을 곧바로 잃는다.
+    if (snap === 'peek' || snap === 'full') setSnap('half');
+  }, [desktop, snap]);
+
+  // 상세 닫기. 열 때 히스토리를 쌓았으면 뒤로가기로 닫는다 —
+  // 그래야 주소·히스토리·화면이 어긋나지 않는다(닫기 버튼과 기기 뒤로가기가 같은 일을 한다).
+  const closeDetail = useCallback(() => {
+    if (pushedRef.current) { window.history.back(); return; }
+    setDetailPlace(null);
+    if (!desktop) setSnap((cur) => (cur === 'full' ? 'half' : cur));
+  }, [desktop]);
+
   const handleViewChange = useCallback((vp: Place[], center: { lat: number; lng: number }, level: number) => {
-    setVisiblePlaces(vp);
+    // 중심·배율은 언제나 적는다(새로고침 복원). 목록만 follow 를 따른다.
     setMapCenter(center);
     setMapLevel(level);
-  }, []);
+    if (follow) { setVisiblePlaces(vp); setPendingView(null); return; }
+    setPendingView(vp);
+  }, [follow]);
+
+  // 지도가 보여 준 범위를 목록에 반영한다("이 지역에서 다시 찾기").
+  const applyPendingView = useCallback(() => {
+    if (pendingView) setVisiblePlaces(pendingView);
+    setPendingView(null);
+  }, [pendingView]);
+
+  // 다시 따라가기로 바꾸면 밀린 범위를 바로 반영한다.
+  useEffect(() => {
+    if (follow && pendingView) { setVisiblePlaces(pendingView); setPendingView(null); }
+  }, [follow, pendingView]);
+
+  // 지도에 번호를 달 상위 20곳. 목록과 지도를 눈으로 잇는 유일한 장치다.
+  const numbered = useMemo(() => filtered.slice(0, 20).map((p) => p.placeId), [filtered]);
+
+  // 버튼은 "밀린 것이 실제로 다를 때" 만. 지도를 끌었다 제자리로 돌아오면 띄울 이유가 없다.
+  const pendingDiffers = useMemo(
+    () => Boolean(pendingView) && listSignature(pendingView!) !== listSignature(visiblePlaces ?? []),
+    [pendingView, visiblePlaces],
+  );
 
   const toggleColorScheme = () => {
     const next: ColorScheme = colorScheme === 'dark' ? 'light' : 'dark';
@@ -484,6 +574,11 @@ export default function App() {
             showGoogle={googleReady}
             selectedCategories={categories}
             selectedPlace={selectedPlace}
+            // 지도 위 카드는 "상세가 아직 안 열렸을 때" 만 쓸모가 있다.
+            // 모바일은 시트 맨 위 고정 카드가, 데스크톱은 옆에 선 상세 패널이 같은 내용을
+            // 이미 더 넓게 보여준다 — 그 위에 또 띄우면 지도만 가린다. 그때는 이름표만.
+            showPopup={desktop && !detailPlace}
+            numbered={numbered}
             onSelect={handleSelect}
             onDetail={handleDetail}
             onBoundsChange={handleViewChange}
@@ -499,6 +594,20 @@ export default function App() {
           />
         )}
       </div>
+
+      {/* 목록을 고정해 둔 동안 지도를 옮겼을 때만 뜬다. 네이버·구글이 같은 자리에 같은 버튼을 둔다. */}
+      {pendingDiffers && (
+        <button
+          type="button"
+          onClick={applyPendingView}
+          className="absolute z-30 left-1/2 -translate-x-1/2 flex items-center gap-1.5 bg-surface-raised text-fg border border-line shadow-lg px-4 py-2.5 rounded-full text-sm font-semibold hover:bg-surface-pressed transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+          style={{ top: (desktop ? chipBarHeight : 0) + 16 }}
+        >
+          <MapPin className="w-4 h-4 text-primary-fg" aria-hidden="true" />
+          이 지역에서 다시 찾기
+          <span className="text-xs font-normal text-fg-muted tabular-nums">{pendingView?.length.toLocaleString()}곳</span>
+        </button>
+      )}
 
       {/* 카테고리 칩. 데스크톱에서만 지도 위에 선다 —
           모바일에서는 60.8px 를 늘 먹었고, 그만큼이 목록에서 빠졌다(시트 안으로 들였다). */}
@@ -551,13 +660,15 @@ export default function App() {
           </header>
         }
       >
-        {detailPlace ? (
+        {/* 모바일에서는 상세가 시트를 차지한다. 데스크톱에서는 목록을 남기고
+            상세가 그 옆에 선다(아래 별도 패널) — 네이버·구글 PC 가 그렇게 한다. */}
+        {!desktop && detailPlace ? (
           <PlaceSheet
             place={detailPlace}
             ratings={ratings[detailPlace.placeId]}
             means={means}
             googleEnabled={GOOGLE_ENABLED}
-            onClose={() => setDetailPlace(null)}
+            onClose={closeDetail}
             visit={visits[detailPlace.placeId]}
             onToggleVisit={toggleVisit}
             onNote={setNote}
@@ -586,6 +697,8 @@ export default function App() {
               onDiscoverChange={setDiscover}
               unvisitedOnly={unvisitedOnly}
               onUnvisitedOnlyChange={setUnvisitedOnly}
+              follow={follow}
+              onFollowChange={setFollow}
               onPickNow={pickNow}
               regionOpen={regionOpen}
               onRegionOpenChange={setRegionOpen}
@@ -650,6 +763,14 @@ export default function App() {
                 showGoogle={googleReady}
                 ratingsLoading={ratingsLoading}
                 selectedPlaceId={selectedPlace?.placeId ?? null}
+                // 모바일은 고른 가게를 맨 위에 고정하고, 데스크톱은 그 카드로 스크롤한다.
+                pinned={!desktop ? selectedPlace : null}
+                onUnpin={() => setSelectedPlace(null)}
+                autoScroll={desktop}
+                onRendered={requestGoogle}
+                // 조건을 바꿨을 때만 목록을 맨 위로. 지도를 미는 것으로는 되감지 않는다.
+                resetKey={[sort, textFilter, categories.join('|'), openOnly, minScore, unvisitedOnly,
+                  region.sido, region.sigungu, region.dong, near?.label ?? '', radius, scope, discover].join(',')}
                 onSelect={handleSelect}
                 onDetail={handleDetail}
                 origin={distanceOrigin}
@@ -673,6 +794,26 @@ export default function App() {
           </>
         )}
       </ListPanel>
+
+      {/* 데스크톱 상세. 목록 패널 오른쪽에 나란히 선다 — 목록을 잃지 않는다.
+          칩 바가 그 위를 지나가므로 시작 높이를 칩 바 아래로 잡는다. */}
+      {desktop && detailPlace && (
+        <aside
+          className="absolute left-[416px] bottom-4 z-20 w-[380px] flex flex-col bg-surface shadow-2xl rounded-xl overflow-hidden"
+          style={{ top: chipBarHeight + 16 }}
+        >
+          <PlaceSheet
+            place={detailPlace}
+            ratings={ratings[detailPlace.placeId]}
+            means={means}
+            googleEnabled={GOOGLE_ENABLED}
+            onClose={closeDetail}
+            visit={visits[detailPlace.placeId]}
+            onToggleVisit={toggleVisit}
+            onNote={setNote}
+          />
+        </aside>
+      )}
 
       {/* 모바일에서 시트가 접혔을 때 올릴 수 있는 손잡이 */}
       {!desktop && snap === 'peek' && (

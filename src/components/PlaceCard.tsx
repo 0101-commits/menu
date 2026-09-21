@@ -27,6 +27,8 @@ interface Props {
   showGoogle: boolean;
   ratingsLoading: boolean;
   visited: boolean;
+  /** 지도 마커에 붙은 번호(상위 20곳). 없으면 색 점만 보인다. */
+  rank?: number;
 }
 
 const STATE_CLASS: Record<string, string> = {
@@ -39,6 +41,7 @@ const STATE_CLASS: Record<string, string> = {
 
 export function PlaceCard({
   place, ratings, distanceKm, selected, onSelect, onDetail, means, showGoogle, ratingsLoading, visited,
+  rank: mapNumber,
 }: Props) {
   const status = openStatus(ratings?.hours, undefined, ratings?.hoursDay);
   const price = formatPrice(ratings?.kakao?.price);
@@ -49,6 +52,7 @@ export function PlaceCard({
 
   return (
     <li
+      data-place={place.placeId}
       className={`rounded-xl border transition-colors ${
         selected ? 'border-primary bg-primary-weak' : 'border-line bg-surface hover:bg-surface-pressed'
       }`}
@@ -65,11 +69,22 @@ export function PlaceCard({
       >
         <span className="flex justify-between items-start gap-2">
           <span className="flex items-center gap-1.5 min-w-0">
-            <span
-              aria-hidden="true"
-              className="w-2 h-2 rounded-full shrink-0"
-              style={{ background: colorOf(place.category) }}
-            />
+            {/* 지도 마커와 같은 번호. 번호가 없으면 예전처럼 색 점만 찍는다. */}
+            {mapNumber ? (
+              <span
+                className="grid place-items-center shrink-0 w-5 h-5 rounded-full text-[11px] font-bold text-white tabular-nums"
+                style={{ background: colorOf(place.category) }}
+                aria-label={`지도 ${mapNumber}번`}
+              >
+                {mapNumber}
+              </span>
+            ) : (
+              <span
+                aria-hidden="true"
+                className="w-2 h-2 rounded-full shrink-0"
+                style={{ background: colorOf(place.category) }}
+              />
+            )}
             <span className="font-bold text-fg text-base truncate">{place.name}</span>
             {visited && (
               <Check className="w-3.5 h-3.5 shrink-0 text-[var(--matpin-open)]" aria-label="가본 곳" />

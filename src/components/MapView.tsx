@@ -31,6 +31,8 @@ const POPUP_SPACE = 224;
 const POPUP_GAP = 28;
 // 팝업 아랫변과 마커 사이 간격. 마커 그림(선택 시 44px)을 덮지 않을 만큼.
 const MARKER_GAP = 48;
+// 이름표만 띄울 때(모바일) 마커 위로 필요한 높이.
+const LABEL_SPACE = 84;
 
 // ---------- 마커 그림 ----------
 // 색군마다 핀을 하나씩 만든다. 4,084 개 마커가 이 7 장을 공유한다.
@@ -45,6 +47,23 @@ function pinSvg(color: string, selected: boolean) {
         `<path d="M12 1C6.2 1 1.5 5.7 1.5 11.5c0 7.9 9.2 19.6 10.1 20.8.2.3.6.3.8 0C13.3 31.1 22.5 19.4 22.5 11.5 22.5 5.7 17.8 1 12 1z" ` +
         `fill="${color}" stroke="${stroke}" stroke-width="2"/>` +
         `<circle cx="12" cy="11.5" r="4" fill="#ffffff"/>` +
+      `</svg>`,
+    )
+  );
+}
+
+// 목록 상위 N 곳에만 번호를 단다. 네이버 지도가 목록과 지도를 잇는 방식이고,
+// 그게 없으면 "목록 3번째가 지도 어디인지" 를 눈으로 이을 방법이 없다.
+// 전부에 번호를 달지는 않는다 — 4,084개가 숫자로 뒤덮이면 읽을 게 없어진다.
+function numberPinSvg(color: string, n: number) {
+  return (
+    `data:image/svg+xml;charset=UTF-8,` +
+    encodeURIComponent(
+      `<svg xmlns="http://www.w3.org/2000/svg" width="26" height="36" viewBox="0 0 24 34">` +
+        `<path d="M12 1C6.2 1 1.5 5.7 1.5 11.5c0 7.9 9.2 19.6 10.1 20.8.2.3.6.3.8 0C13.3 31.1 22.5 19.4 22.5 11.5 22.5 5.7 17.8 1 12 1z" ` +
+        `fill="${color}" stroke="#ffffff" stroke-width="2"/>` +
+        `<text x="12" y="15.5" text-anchor="middle" font-family="system-ui,-apple-system,sans-serif" ` +
+        `font-size="11" font-weight="700" fill="#ffffff">${n}</text>` +
       `</svg>`,
     )
   );
@@ -117,6 +136,10 @@ interface Props {
   showGoogle: boolean;
   selectedCategories: string[];
   selectedPlace: Place | null;
+  /** 고른 마커 위에 카드를 띄울지(데스크톱). 끄면 이름표만 뜬다(모바일). */
+  showPopup?: boolean;
+  /** 번호를 달 placeId 들. 목록 순서 그대로 1번부터. */
+  numbered?: string[];
   onSelect: (p: Place | null) => void;
   onDetail: (p: Place) => void;
   onBoundsChange: (visible: Place[], center: { lat: number; lng: number }, level: number) => void;
@@ -139,7 +162,7 @@ interface Props {
 }
 
 export function MapView({
-  places, ratings, means, showGoogle, selectedCategories, selectedPlace,
+  places, ratings, means, showGoogle, selectedCategories, selectedPlace, showPopup = true, numbered,
   onSelect, onDetail, onBoundsChange, initialView, focus, discovered, discoveredRatings,
   onDiscoveredOpen, discoverFailed, discoverUnavailable, topOffset, bottomInset, onStatusChange,
 }: Props) {
@@ -154,6 +177,9 @@ export function MapView({
   const meMarkerRef = useRef<any>(null);
   const discMarkersRef = useRef<any[]>([]);
   const prevSelectedRef = useRef<Place | null>(null);
+  // 지금 번호가 붙어 있는 마커. 선택 해제 때 "원래 그림" 이 무엇인지 알아야 한다.
+  const appliedNumbers = useRef<Map<string, number>>(new Map());
+  const numberImages = useRef<Map<string, any>>(new Map());
   // 마커 클릭이 지도 클릭으로도 잡히는 것을 막는다. 동기적으로 읽혀야 해서 ref 다.
   const suppressClick = useRef(false);
 
@@ -166,6 +192,13 @@ export function MapView({
   const [notice, setNotice] = useState<string | null>(null);
   const [nearby, setNearby] = useState<Place[] | null>(null);
   const [openDiscovered, setOpenDiscovered] = useState<Discovered | null>(null);
+
+  // 고른 마커 위에 무엇을 띄울지. 데스크톱은 카드(팝업), 모바일은 이름표 하나다.
+  //
+  // 모바일에서 카드를 띄우면 지도의 219px 을 덮는다 — 그리고 그 카드는 바로 아래 시트
+  // 맨 위(고정 슬롯)에 같은 내용으로 또 서 있다. 같은 말을 두 번 하면서 지도를 가리는 셈이라
+  // 모바일에서는 이름표만 남긴다. 어느 핀을 골랐는지는 그것으로 충분하다.
+  const popupSpace = showPopup ? POPUP_SPACE : LABEL_SPACE;
 
   // 보이는 지도 영역 한가운데(정확히는 팝업이 들어갈 자리)로 좌표를 옮긴다.
   //
@@ -181,7 +214,7 @@ export function MapView({
     const mapH = el.getBoundingClientRect().height;
     const visibleH = mapH - bottomInset;
     // 띠가 팝업보다 좁으면 어디에 둬도 잘린다. 그때는 그냥 가운데에 둔다(시트를 내리면 맞는다).
-    if (visibleH < POPUP_SPACE + 40) return;
+    if (visibleH < popupSpace + 40) return;
     const shift = mapH / 2 - (visibleH - POPUP_GAP);
     if (Math.abs(shift) <= 1) return;
 
@@ -193,7 +226,7 @@ export function MapView({
     if (!kakao || !proj) return;
     const p = proj.containerPointFromCoords(position);
     map.setCenter(proj.coordsFromContainerPoint(new kakao.maps.Point(p.x, p.y + shift)));
-  }, [bottomInset]);
+  }, [bottomInset, popupSpace]);
 
   // 콜백을 지도 이벤트 안에서 쓰려면 최신 값을 ref 로 들고 있어야 한다.
   // 이벤트 리스너는 한 번만 붙고 클로저는 그때 값을 가둔다.
@@ -335,6 +368,41 @@ export function MapView({
     // 지도가 아직 없어 그냥 돌아 나가고, selectedCategories 참조는 그 뒤 바뀌지 않는다.
   }, [selectedCategories, status]);
 
+  // 선택도 번호도 아닌 "원래 그림". 번호가 붙은 곳은 번호 핀이 원래 그림이다.
+  const baseImage = useCallback((place: Place) => {
+    const kakao = kakaoRef.current;
+    const images = imagesRef.current;
+    if (!kakao || !images) return null;
+    const n = appliedNumbers.current.get(place.placeId);
+    const color = colorOf(place.category);
+    if (!n) return images.normal.get(color);
+    const key = `${color}:${n}`;
+    let img = numberImages.current.get(key);
+    if (!img) {
+      img = new kakao.maps.MarkerImage(numberPinSvg(color, n), new kakao.maps.Size(26, 36), {
+        offset: new kakao.maps.Point(13, 36),
+      });
+      numberImages.current.set(key, img);
+    }
+    return img;
+  }, []);
+
+  // 목록 상위 N 곳에 번호를 붙인다. 목록이 바뀌면 번호도 따라 옮겨 간다.
+  useEffect(() => {
+    if (status !== 'ready' || !imagesRef.current) return;
+    const next = new Map((numbered ?? []).map((id, i) => [id, i + 1] as const));
+    const placeOf = new Map(markersRef.current.map((m) => [m.place.placeId, m.place]));
+
+    const touched = new Set([...appliedNumbers.current.keys(), ...next.keys()]);
+    appliedNumbers.current = next;
+    for (const id of touched) {
+      if (selectedPlace?.placeId === id) continue; // 선택 그림이 이긴다
+      const place = placeOf.get(id);
+      const marker = markerBySid.current.get(id);
+      if (place && marker) marker.setImage(baseImage(place));
+    }
+  }, [numbered, status, selectedPlace, baseImage]);
+
   // ---------- 선택 ----------
   useEffect(() => {
     const kakao = kakaoRef.current;
@@ -342,11 +410,11 @@ export function MapView({
     const images = imagesRef.current;
     if (!kakao || !map || !images || status !== 'ready') return;
 
-    // 이전 선택 마커를 원래 그림으로
+    // 이전 선택 마커를 원래 그림으로(번호가 붙어 있었다면 번호 핀으로)
     const prev = prevSelectedRef.current;
     if (prev) {
       const m = markerBySid.current.get(prev.placeId);
-      m?.setImage(images.normal.get(colorOf(prev.category)));
+      m?.setImage(baseImage(prev));
       m?.setZIndex(0);
     }
     prevSelectedRef.current = selectedPlace;
@@ -378,7 +446,7 @@ export function MapView({
       el.style.position = 'relative';
       // 가로도 같은 이유로 어긋난다(xAnchor 도 폭을 모른 채 계산된다 — 실측으로 창이
       // 마커 오른쪽에 붙어 화면 밖으로 78px 나갔다). 가운데 맞춤도 CSS 에 맡긴다.
-      el.style.transform = `translate(-50%, calc(-100% - ${MARKER_GAP}px))`;
+      el.style.transform = `translate(-50%, calc(-100% - ${showPopup ? MARKER_GAP : 22}px))`;
       infoRef.current = {
         el,
         root: createRoot(el),
@@ -409,16 +477,26 @@ export function MapView({
   useEffect(() => {
     if (!selectedPlace || !infoRef.current) return;
     infoRef.current.root.render(
-      <PlaceInfoWindow
-        place={selectedPlace}
-        ratings={ratings[selectedPlace.placeId]}
-        means={means}
-        showGoogle={showGoogle}
-        onClose={() => cb.current.onSelect(null)}
-        onDetail={onDetail}
-      />,
+      showPopup ? (
+        <PlaceInfoWindow
+          place={selectedPlace}
+          ratings={ratings[selectedPlace.placeId]}
+          means={means}
+          showGoogle={showGoogle}
+          onClose={() => cb.current.onSelect(null)}
+          onDetail={onDetail}
+        />
+      ) : (
+        <button
+          type="button"
+          onClick={() => onDetail(selectedPlace)}
+          className="max-w-[240px] truncate bg-surface-raised text-fg border border-line shadow-lg rounded-full px-3 min-h-9 text-sm font-bold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+        >
+          {selectedPlace.name}
+        </button>
+      ),
     );
-  }, [selectedPlace, status, ratings, means, showGoogle, onDetail]);
+  }, [selectedPlace, status, ratings, means, showGoogle, showPopup, onDetail]);
 
   // ---------- 반경·이동 ----------
   useEffect(() => {
