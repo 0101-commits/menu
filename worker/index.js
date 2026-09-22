@@ -79,12 +79,34 @@ function putGoogle(env, gid, value) {
  * **요금의 진짜 상한은 Google Cloud 콘솔의 API 일일 할당량(Quotas)에서 걸어야 한다.**
  * 여기 값은 그 앞의 완충일 뿐이다. docs/keys.html 3단계 참고.
  */
+// isolate 안 카운터. 요청마다 KV 에 쓰지 않기 위한 완충이다.
+//   key → { base, baseAt, local, flushed }
+const _quotaMem = new Map();
+const QUOTA_FLUSH_EVERY = 10;   // 이만큼 쌓여야 KV 에 한 번 쓴다
+const QUOTA_BASE_TTL = 60_000;  // 베이스(KV 값)를 다시 읽는 주기
+
 async function overQuota(env, key, limit) {
   if (!limit) return false;
   const day = new Date().toISOString().slice(0, 10);
   const k = `quota:${key}:${day}`;
-  const used = Number((await env.RATINGS.get(k)) ?? 0);
-  await env.RATINGS.put(k, String(used + 1), { expirationTtl: 2 * DAY });
+  const now = Date.now();
+
+  let st = _quotaMem.get(k);
+  if (!st || now - st.baseAt > QUOTA_BASE_TTL) {
+    // 베이스는 KV 에서 읽는다(읽기 무료 한도가 쓰기보다 100배 넉넉하다).
+    const base = Number((await env.RATINGS.get(k)) ?? 0);
+    st = { base, baseAt: now, local: st?.local ?? 0, flushed: st?.flushed ?? 0 };
+    _quotaMem.set(k, st);
+  }
+  st.local += 1;
+  const used = st.base + st.local;
+
+  // 10건마다, 그리고 한도에 닿는 순간에는 반드시 한 번 써 둔다.
+  // 종전에는 호출마다 put 이라 무료 한도(1,000 put/일)를 캐시 미스 250건이면 태웠다.
+  if (st.local - st.flushed >= QUOTA_FLUSH_EVERY || used === limit) {
+    st.flushed = st.local;
+    try { await env.RATINGS.put(k, String(used), { expirationTtl: 2 * DAY }); } catch (_) { /* 한도 초과 등 */ }
+  }
   return used >= limit;
 }
 
@@ -208,6 +230,7 @@ export default {
           google: Boolean(env.GOOGLE_PLACES_KEY), // 키가 붙었는지만. 값은 절대 안 준다.
           routes: ['/', '/google', '/health'],
           builtAt: BUILT_AT,
+          commit: env.DEPLOY_SHA ?? '',
         },
         200,
         { ...cors, 'cache-control': 'no-store' },
@@ -226,8 +249,20 @@ export default {
     if (!q.n && !q.k && !q.g) return json({ error: 'empty' }, 400, cors);
 
     const cacheKey = `r:${q.n}|${q.k}|${q.g}`;
+    // 캐시는 두 층이다. KV 는 완성된 결과만(전역·30일), 엣지 Cache API 는 부분 결과까지(1시간).
+    // 종전에는 부분 결과도 KV 에 썼고, 그 put 이 무료 한도(1,000/일)를 가장 빨리 태웠다.
+    // Cache API 는 put 이 한도에 안 걸린다 — 대신 PoP 별이라 적중률이 낮고, 그래서 2층이다.
+    const edge = caches.default;
+    const edgeKey = new Request(`https://matpin-cache/${encodeURIComponent(cacheKey)}`);
+
     const hit = await env.RATINGS.get(cacheKey, 'json');
     if (hit) return json(hit, 200, { ...cors, 'x-cache': 'hit', 'cache-control': 'public, max-age=3600' });
+
+    const edgeHit = await edge.match(edgeKey).catch(() => null);
+    if (edgeHit) {
+      const body = await edgeHit.json().catch(() => null);
+      if (body) return json(body, 200, { ...cors, 'x-cache': 'edge', 'cache-control': 'public, max-age=3600' });
+    }
 
     const out = await collect(env, q);
 
@@ -237,9 +272,13 @@ export default {
     const wanted = [q.n && 'naver', q.k && 'kakao', q.g && env.GOOGLE_PLACES_KEY && 'google'].filter(Boolean);
     const complete = wanted.length > 0 && wanted.every((k) => out[k]);
     if (Object.keys(out).length) {
-      ctx.waitUntil(
-        env.RATINGS.put(cacheKey, JSON.stringify(out), { expirationTtl: complete ? TTL : 3600 }),
-      );
+      const body = JSON.stringify(out);
+      const ttl = complete ? TTL : 3600;
+      // 부분 결과는 엣지에만 둔다 — 한 시간 뒤 어차피 다시 받아야 하는 값에 KV 쓰기를 쓰지 않는다.
+      ctx.waitUntil(edge.put(edgeKey, new Response(body, {
+        headers: { 'content-type': 'application/json', 'cache-control': `max-age=${ttl}` },
+      })).catch(() => {}));
+      if (complete) ctx.waitUntil(env.RATINGS.put(cacheKey, body, { expirationTtl: TTL }));
     }
     return json(out, 200, { ...cors, 'x-cache': 'miss', 'cache-control': 'public, max-age=3600' });
   },
