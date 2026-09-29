@@ -48,9 +48,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 24
           cache: npm
@@ -70,7 +70,10 @@ jobs:
         if: inputs.mode == 'verify'
         env:
           GOOGLE_PLACES_KEY: ${{ secrets.GOOGLE_PLACES_KEY }}
-        run: node scripts/google-verify-match.mjs --n=${{ inputs.n }}
+          N: ${{ inputs.n }}
+        run: |
+          [[ "$N" =~ ^[0-9]+$ ]] || { echo 'n 은 숫자만'; exit 1; }
+          node scripts/google-verify-match.mjs --n="$N"
 
       # 게이트가 막아도 결과는 봐야 한다. 무엇이 어긋났는지가 다음 수를 정한다.
       - name: 검증 결과 요약
@@ -84,18 +87,20 @@ jobs:
         if: inputs.mode == 'seed'
         env:
           GOOGLE_PLACES_KEY: ${{ secrets.GOOGLE_PLACES_KEY }}
+          LIMIT: ${{ inputs.limit }}
         run: |
-          if [ "${{ inputs.limit }}" = "all" ]; then
+          [[ "$LIMIT" == all || "$LIMIT" =~ ^[0-9]+$ ]] || { echo 'limit 는 all 또는 숫자'; exit 1; }
+          if [ "$LIMIT" = "all" ]; then
             node scripts/google-fill.mjs --all ${{ inputs.confirm_paid && '--yes' || '' }}
           else
-            node scripts/google-fill.mjs --limit=${{ inputs.limit }} ${{ inputs.confirm_paid && '--yes' || '' }}
+            node scripts/google-fill.mjs --limit="$LIMIT" ${{ inputs.confirm_paid && '--yes' || '' }}
           fi
 
       # 받은 값은 공개 레포에 커밋하지 않는다(약관). 아티팩트로만 내보내고 KV 로 간다.
       # 기본 보관 기간(90일)보다 짧게 둔다 — 로컬로 내려받는 즉시 쓸모가 끝난다.
       - name: 산출물 업로드
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: google-seed
           path: |
@@ -107,8 +112,10 @@ jobs:
 
       - name: 요약
         if: always()
+        env:
+          MODE: ${{ inputs.mode }}
         run: |
-          echo '## 구글 ${{ inputs.mode }}' >> "$GITHUB_STEP_SUMMARY"
+          echo "## 구글 $MODE" >> "$GITHUB_STEP_SUMMARY"
           if [ -f raw/google.json ]; then
             node -e "const l=require('./raw/google.json');const v=Object.values(l);console.log('- 원장 '+v.length+'건 (없어진 곳 '+v.filter(x=>x.gone).length+'건)')" >> "$GITHUB_STEP_SUMMARY"
           fi

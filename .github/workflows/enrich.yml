@@ -82,9 +82,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 180
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 24
           cache: npm
@@ -94,7 +94,7 @@ jobs:
       # raw/ 는 커밋되지 않는다. 실행 간에 이어 붙이지 않으면 중간에 실패했을 때
       # 다음 실행이 처음부터 다시 조회한다 — 구글은 그게 곧 요금이다.
       - name: 진행분 복원
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: raw
           key: enrich-raw-${{ github.run_id }}
@@ -105,7 +105,10 @@ jobs:
         env:
           KAKAO_REST_KEY: ${{ secrets.KAKAO_REST_KEY }}
           GOOGLE_PLACES_KEY: ${{ secrets.GOOGLE_PLACES_KEY }}
-        run: node scripts/match.mjs ${{ inputs.match_source == 'kakao' && '--source=kakao' || '' }} ${{ inputs.limit && format('--limit={0}', inputs.limit) || '' }} ${{ inputs.retry_miss && '--retry-miss' || '' }} ${{ inputs.debug && '--debug' || '' }}
+          LIMIT: ${{ inputs.limit }}
+        run: |
+          [[ -z "$LIMIT" || "$LIMIT" =~ ^[0-9]+$ ]] || { echo 'limit 는 숫자만'; exit 1; }
+          node scripts/match.mjs ${{ inputs.match_source == 'kakao' && '--source=kakao' || '' }} ${LIMIT:+--limit=$LIMIT} ${{ inputs.retry_miss && '--retry-miss' || '' }} ${{ inputs.debug && '--debug' || '' }}
 
       # 매칭 결과를 places.json 에 반영한다(kakaoId 필드).
       - name: places.json 갱신 + 게이트
@@ -118,9 +121,16 @@ jobs:
       # 이미 받아 둔 옛 수집분을 건너뛰고 새 필드가 한 달 뒤에야 들어온다.
       - name: 평점 수집
         if: ${{ !inputs.skip_ratings }}
+        env:
+          SOURCES: ${{ inputs.sources || 'kakao' }}
+          DELAY: ${{ inputs.delay }}
+          LIMIT: ${{ inputs.limit }}
         run: |
+          [[ "$SOURCES" =~ ^(kakao|naver|both)$ ]] || { echo 'sources 값 오류'; exit 1; }
+          [[ -z "$DELAY" || "$DELAY" =~ ^[0-9]+$ ]] || { echo 'delay 는 숫자만'; exit 1; }
+          [[ -z "$LIMIT" || "$LIMIT" =~ ^[0-9]+$ ]] || { echo 'limit 는 숫자만'; exit 1; }
           node scripts/restore-ratings.mjs
-          node scripts/ratings.mjs --source=${{ inputs.sources || 'kakao' }} ${{ inputs.delay && format('--delay={0}', inputs.delay) || '' }} ${{ inputs.limit && format('--limit={0}', inputs.limit) || '' }} ${{ inputs.force && '--force' || '' }}
+          node scripts/ratings.mjs --source="$SOURCES" ${DELAY:+--delay=$DELAY} ${LIMIT:+--limit=$LIMIT} ${{ inputs.force && '--force' || '' }}
 
       # 평점을 건너뛰어도 ratings.json 은 있어야 게이트가 돈다.
       - name: 평점 원본 복원 (건너뛴 경우)
@@ -150,7 +160,7 @@ jobs:
       # 실패해도 남긴다. 여기까지 받은 건 다음 실행이 이어받는다.
       - name: 진행분 저장
         if: always()
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: raw
           key: enrich-raw-${{ github.run_id }}
