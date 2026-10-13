@@ -26,6 +26,7 @@ interface Options {
   showGoogle: boolean;
   showPopup: boolean;
   bottomInset: number;
+  leftInset: number;
   focus: MapFocus | null;
   onSelect: (place: Place | null) => void;
   onDetail: (place: Place) => void;
@@ -88,19 +89,22 @@ export function usePlaceLayers(options: Options) {
     const element = options.runtime.mapEl.current;
     if (!map || !element) return;
     map.setCenter(position);
-    const shift = popupCenterShift(
-      element.getBoundingClientRect().height,
-      options.bottomInset,
-      options.showPopup ? POPUP_SPACE : LABEL_SPACE,
-      POPUP_GAP,
-    );
-    if (shift == null || shift === 0) return;
+    const space = options.showPopup ? POPUP_SPACE : LABEL_SPACE;
+    // 아래 시트가 있으면(모바일) 시트 바로 위에 붙인다. 시트가 없는데 같은 식을 쓰면 화면 맨 아래
+    // 가장자리에 붙어 버린다(데스크톱) — 그때는 가운데에서 말풍선·이름표 몫의 절반만 내린다.
+    const shiftY = options.bottomInset > 0
+      ? popupCenterShift(element.getBoundingClientRect().height, options.bottomInset, space, POPUP_GAP) ?? 0
+      : -space / 2;
+    // 지도는 화면 전체 폭이라 그냥 가운데면 데스크톱에서 목록·상세 패널 밑에 깔린다.
+    // 중심을 왼쪽으로 패널 폭의 절반만큼 옮겨, 가게가 패널 오른쪽 빈 지도의 가운데에 오게 한다.
+    const shiftX = -options.leftInset / 2;
+    if (!shiftX && !shiftY) return;
     const kakao = options.runtime.kakaoRef.current;
     const projection = map.getProjection?.();
     if (!kakao || !projection) return;
     const point = projection.containerPointFromCoords(position);
-    map.setCenter(projection.coordsFromContainerPoint(new kakao.maps.Point(point.x, point.y + shift)));
-  }, [options.runtime, options.bottomInset, options.showPopup]);
+    map.setCenter(projection.coordsFromContainerPoint(new kakao.maps.Point(point.x + shiftX, point.y + shiftY)));
+  }, [options.runtime, options.bottomInset, options.leftInset, options.showPopup]);
 
   useEffect(() => {
     const kakao = options.runtime.kakaoRef.current;
@@ -149,7 +153,7 @@ export function usePlaceLayers(options: Options) {
     if (!kakao || !options.selectedPlace || options.status !== 'ready') return;
     centerForPopup(new kakao.maps.LatLng(options.selectedPlace.lat, options.selectedPlace.lng));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [options.bottomInset]);
+  }, [options.bottomInset, options.leftInset]);
 
   useEffect(() => {
     if (!options.selectedPlace || !info.current) return;

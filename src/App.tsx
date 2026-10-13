@@ -136,6 +136,8 @@ export default function App() {
             discoverUnavailable={discovery.discoverUnavailable}
             topOffset={layout.chipBarHeight}
             bottomInset={layout.bottomInset}
+            // 목록 left-4+w-96 → 416, 상세 left-[416px]+w-[380px] → 796 (아래 aside 와 같이 바꿀 것)
+            leftInset={layout.desktop ? (map.detailPlace ? 796 : 416) : 0}
             initialView={{ c: initial.c, z: initial.z }}
           />
         )}

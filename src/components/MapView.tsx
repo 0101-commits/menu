@@ -42,13 +42,15 @@ interface Props {
   discoverUnavailable: boolean;
   topOffset: number;
   bottomInset: number;
+  /** 데스크톱에서 왼쪽을 덮는 패널 폭(px). 고른 가게를 그 오른쪽 빈 지도 가운데에 놓는다. */
+  leftInset?: number;
   onStatusChange?: (status: 'loading' | 'ready' | 'error') => void;
 }
 
 export function MapView({
   places, ratings, means, showGoogle, selectedCategories, selectedPlace, showPopup = true, numbered,
   onSelect, onDetail, onBoundsChange, initialView, focus, discovered, discoveredRatings,
-  onDiscoveredOpen, discoverFailed, discoverUnavailable, topOffset, bottomInset, onStatusChange,
+  onDiscoveredOpen, discoverFailed, discoverUnavailable, topOffset, bottomInset, leftInset = 0, onStatusChange,
 }: Props) {
   const [openDiscovered, setOpenDiscovered] = useState<Discovered | null>(null);
   const [locating, setLocating] = useState(false);
@@ -75,6 +77,7 @@ export function MapView({
     showGoogle,
     showPopup,
     bottomInset,
+    leftInset,
     focus,
     onSelect,
     onDetail,
