@@ -37,6 +37,7 @@ const DELAY = Number(A.delay ?? 120);
 // 넘치면 그 회차는 거기서 멈추고 다음 실행이 이어받는다(이미 붙은 건 건너뛰므로 낭비가 없다).
 const GOOGLE_CAP = Number(A['google-cap'] ?? 4500);
 let googleCalls = 0;
+let googleOff = ''; // GOOGLE_AUTH 사유. 한 번 막히면 이번 실행은 구글을 더 부르지 않는다
 
 const KAKAO_KEY = process.env.KAKAO_REST_KEY;
 const GOOGLE_KEY = process.env.GOOGLE_PLACES_KEY;
@@ -267,11 +268,18 @@ for (const p of targets) {
     await sleep(DELAY);
   }
 
-  if (wantGoogle && googleCalls < GOOGLE_CAP && (A.recheck || !matchedG(p, cur))) {
+  if (wantGoogle && !googleOff && googleCalls < GOOGLE_CAP && (A.recheck || !matchedG(p, cur))) {
     googleCalls++;
-    const docs = await withRetry(() => googleSearch(p), 'google');
-    if (docs.__error) { stat.gErr++; }
-    else {
+    const docs = await withRetry(() => googleSearch(p), 'google').catch((e) => {
+      // 키·결제가 막히면 구글만 접고 카카오는 끝까지 간다. "키가 없으면 그 소스만 건너뛴다" 와 같은 규칙이다.
+      // 구글 하나 때문에 월간 보강(영업시간·메뉴·평점)이 통째로 멈추던 것(2026-10-01).
+      if (!String(e.message).startsWith('GOOGLE_AUTH')) throw e;
+      googleOff = String(e.message).replace(/\s+/g, ' ');
+      console.log(`::warning title=구글 매칭 중단::${googleOff}`);
+      return null;
+    });
+    if (docs?.__error) { stat.gErr++; }
+    else if (docs) {
       const hit = pickGoogle(p, docs);
       if (!hit) debugCandidates('google', p, docs, (d) => (d.location ? [d.location.latitude, d.location.longitude] : null));
       if (hit) {
@@ -311,6 +319,7 @@ fs.writeFileSync(
   [
     `# 매칭 리포트 — ${new Date().toISOString().slice(0, 10)}`, '',
     `전체 ${total}건 · 이번 대상 ${targets.length}건`, '',
+    ...(googleOff ? [`> ⚠ 구글 매칭 중단 — ${googleOff}`, ''] : []),
     '```json', JSON.stringify(stat, null, 2), '```', '',
     `## 확인이 필요한 medium 매칭 (${med.length})`, '',
     '이름이나 거리 중 하나만 맞은 건입니다. 틀렸으면 `raw/match.json` 에서 해당 항목의 `kakaoId` 를 지우세요.', '',
