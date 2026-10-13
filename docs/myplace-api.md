@@ -11,6 +11,7 @@ https://pages.map.naver.com/save-pages/api/maps-bookmark/v3/
 
 인증은 네이버 로그인 쿠키(`NID_AUT` / `NID_SES`)로만. 별도 토큰·헤더 불필요.
 미로그인 시 `nid.naver.com/nidlogin.login`으로 리다이렉트된다.
+**2026-10 실측: 지금은 리다이렉트 대신 `405` + `{"apiErrorCode":1200,"apiErrorMessage":"로그인정보가 없습니다."}`** — `fetch-myplace.mjs` 가 이걸 `LOGIN_REQUIRED` 로 끊는다.
 
 ## 1. 폴더 목록
 
