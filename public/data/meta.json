@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "generatedAt": "2026-09-21T04:44:20.362Z",
+  "places": {
+    "total": 4084,
+    "withKakaoId": 3881,
+    "withGoogleId": 3613
+  },
+  "ratings": {
+    "total": 4066,
+    "withNaver": 4060,
+    "withKakao": 3881,
+    "withGoogle": 0,
+    "withHours": 3233,
+    "withMenus": 3766
+  }
+}

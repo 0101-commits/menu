@@ -18,7 +18,8 @@ npm run dev        # http://localhost:5173/menu/
 ```
 
 ```bash
-npm run test       # 규칙 자체 검사 (주소 파싱·영업시간·통합 평점·검색·URL)
+npm run test       # 규칙 검사 + Vitest(필터·지도상태·URL·방문기록·UI)
+npm run test:watch # 프런트 테스트 감시
 npm run typecheck
 npm run build
 ```
@@ -32,12 +33,13 @@ npm run build
 
 ## 데이터
 
-`public/data/` 두 파일이 화면의 전부다. 손으로 고치지 않고 생성한다.
+`public/data/` 세 파일이 화면의 데이터 원천이다. 손으로 고치지 않고 생성한다.
 
 | 파일 | 내용 | 만드는 것 |
 |---|---|---|
 | `places.json` | 장소 4,084건 (이름·좌표·지번·행정구역·외부 ID) | `scripts/build-places.mjs` |
 | `ratings.json` | 평점·영업시간·메뉴·키워드 리뷰 | `scripts/build-ratings.mjs` |
+| `meta.json` | 생성 시각·장소 수·소스별 보유율 | `scripts/build-meta.mjs` |
 
 앱은 시작할 때 `places.json` 을 받고, 목록이 뜬 뒤에 `ratings.json` 을 받아 합친다.
 평점 파일이 없어도 목록·지도·검색은 그대로 동작한다.
@@ -57,6 +59,7 @@ npm run sync
 | 생성 | `build-places.mjs` | 정규화·머지·게이트 후 `places.json` | — |
 | 평점 | `ratings.mjs` | 네이버·카카오에서 점수 수집 (4,084곳 ≈ 75분) | — |
 | 정리 | `build-ratings.mjs` | 게이트 후 `ratings.json` | — |
+| 메타 | `build-meta.mjs` | 생성 시각·소스별 커버리지 `meta.json` | — |
 | 검사 | `npm run test && npm run typecheck` | | |
 
 게이트를 하나라도 통과하지 못하면 파일을 쓰지 않고 중단한다. 리포트는 `reports/` 에 남는다.
@@ -139,13 +142,29 @@ Places API 에서 캐시를 허용한 건 위경도뿐이다.
 2. **초기 시드.** `npm run google:fill -- --all --yes` → `raw/google-kv.json` →
    `cd worker && npx wrangler kv bulk put ../raw/google-kv.json --binding RATINGS --remote`.
    `raw/google.json` 은 **로컬 재개용 원장**이다(중단 후 재실행 시 건너뛰기용).
-3. **갱신.** 워커의 **Cron Trigger** 가 매일 03:30 KST 에 `metadata.at` 이 가장 오래된
-   `DAILY_REFRESH` 건만 다시 받는다. 3,613곳이면 약 넉 달에 한 바퀴다.
-   값에 TTL 은 없다(영구 보관). 폐업 표시만 90일 뒤 빠진다.
-   온디맨드와 cron 이 `DAILY_GOOGLE_LIMIT` 하나를 나눠 쓴다 — 합쳐서 월 1,000건 안이다.
+3. **갱신.** 값에 TTL은 없다(영구 보관). `/google?ids=`가 30일보다 낡은 값을 돌려줄 때,
+   사용자가 기다리지 않도록 기존 값을 먼저 응답하고 그중 최대 `VIEW_REFRESH_MAX`건을 뒤에서 갱신한다.
+   온디맨드 조회와 갱신은 `DAILY_GOOGLE_LIMIT` 하나를 나눠 써 월 1,000건 안으로 제한한다.
+   Cloudflare 무료 계정의 Cron Trigger 5개 한도가 차 있어 예약 크론은 **현재 비활성**이다.
+   `worker/index.js`의 `scheduled` 핸들러는 한도가 생길 때 다시 켤 수 있도록 보존한다.
 
 옛 `google-refresh.yml` 은 삭제했다. 원장을 Actions 캐시(7일 축출)에서 복원하는데 크론은
 30일 간격이라, 매달 빈 원장으로 시작해 **같은 앞쪽 1,000건에 반복 과금**하는 구조였다.
+
+### Google 데이터 운영 정책
+
+현재 결정은 **평점·리뷰 수를 KV에 TTL 없이 보관하고 수집 시각 `at`을 함께 표시**하는 것이다.
+오래된 값은 실제 조회 시 일부만 갱신한다. 이는 개인용 도구의 비용·가용성을 우선한 결정이며,
+Google Places 약관상 평점 콘텐츠의 장기 보관 위험이 사라진 것은 아니다.
+
+다음 중 하나가 생기면 배포 전에 정책을 다시 검토한다.
+
+- 불특정 다수에게 공개하거나 상업 서비스로 전환
+- 계정·조직 단위 다중 사용자 기능 추가
+- Google 약관 또는 과금 정책 변경
+- 월 API 사용량이 무료 한도의 80%를 두 달 연속 초과
+
+재검토 결과에 따라 Places UI Kit, 저장기간 축소, Google 칸 비활성 중 하나를 선택한다.
 
 ## 디자인
 

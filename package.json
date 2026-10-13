@@ -13,9 +13,13 @@
     "sync:enrich": "node scripts/enrich.mjs --only-new",
     "match": "node scripts/match.mjs",
     "ratings": "node scripts/ratings.mjs",
-    "build:data": "node scripts/build-places.mjs --from-existing && node scripts/build-ratings.mjs",
-    "sync": "npm run sync:fetch && npm run sync:enrich && npm run match && node scripts/build-places.mjs && npm run ratings && node scripts/build-ratings.mjs && npm run test && npm run typecheck",
-    "test": "node scripts/selftest.mjs",
+    "build:data": "node scripts/build-places.mjs --from-existing && node scripts/build-ratings.mjs && npm run build:meta",
+    "sync": "npm run sync:fetch && npm run sync:enrich && npm run match && node scripts/build-places.mjs && npm run ratings && node scripts/build-ratings.mjs && npm run build:meta && npm run test && npm run typecheck",
+    "test": "npm run test:rules && npm run test:unit",
+    "test:rules": "node scripts/selftest.mjs",
+    "test:unit": "vitest run",
+    "test:watch": "vitest",
+    "build:meta": "node scripts/build-meta.mjs",
     "google:fill": "node scripts/google-fill.mjs",
     "google:verify": "node scripts/google-verify-match.mjs"
   },
@@ -27,20 +31,25 @@
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
-    "@eslint/js": "^9.9.1",
+    "@eslint/js": "9.39.1",
+    "@testing-library/jest-dom": "6.6.3",
+    "@testing-library/react": "16.1.0",
+    "@testing-library/user-event": "14.5.2",
     "@types/react": "^18.3.5",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.1",
     "autoprefixer": "^10.4.18",
-    "eslint": "^9.9.1",
+    "eslint": "9.39.1",
     "eslint-plugin-react-hooks": "^5.1.0-rc.0",
     "eslint-plugin-react-refresh": "^0.4.11",
     "globals": "^15.9.0",
+    "jsdom": "25.0.1",
     "postcss": "^8.4.35",
     "tailwindcss": "^3.4.1",
     "typescript": "^5.5.3",
-    "typescript-eslint": "^8.3.0",
+    "typescript-eslint": "8.70.0",
     "vite": "^5.4.2",
-    "vite-plugin-pwa": "^1.3.0"
+    "vite-plugin-pwa": "^1.3.0",
+    "vitest": "3.2.6"
   }
 }

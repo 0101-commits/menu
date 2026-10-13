@@ -34,6 +34,8 @@ interface Props {
   /** 거리 표시의 기준점. 없으면 거리를 안 보여준다. */
   origin: { lat: number; lng: number } | null;
   emptyHint?: string;
+  /** 결과가 0건일 때 사용자가 바로 회복할 수 있는 동작. */
+  emptyActions?: { label: string; onClick: () => void }[];
   /** 가본 곳 placeId 모음 */
   visited: Set<string>;
   /** 고른 가게로 목록을 스크롤할지(데스크톱). 모바일은 pinned 가 대신한다. */
@@ -55,7 +57,7 @@ interface Props {
 
 export function PlaceList({
   places, ratings, means, showGoogle, ratingsLoading,
-  selectedPlaceId, pinned = null, onUnpin, onSelect, onDetail, origin, emptyHint, visited,
+  selectedPlaceId, pinned = null, onUnpin, onSelect, onDetail, origin, emptyHint, emptyActions = [], visited,
   autoScroll = false, onRendered, resetKey = '',
 }: Props) {
   const [limit, setLimit] = useState(PAGE);
@@ -151,11 +153,25 @@ export function PlaceList({
     return (
       <>
         {pinnedCard}
-        <div className="flex-1 grid place-items-center p-6 text-center">
+        <div className="flex-1 grid place-items-center p-6 text-center" role="status" aria-live="polite">
           <div>
             <MapPinOff className="w-8 h-8 mx-auto mb-3 text-fg-subtle" aria-hidden="true" />
             <p className="text-sm text-fg-muted m-0">찾는 맛집이 없습니다</p>
             {emptyHint && <p className="text-xs text-fg-subtle m-0 mt-1">{emptyHint}</p>}
+            {emptyActions.length > 0 && (
+              <div className="mt-3 flex flex-wrap justify-center gap-2">
+                {emptyActions.map((action) => (
+                  <button
+                    key={action.label}
+                    type="button"
+                    onClick={action.onClick}
+                    className="min-h-11 px-3 rounded-full border border-line bg-surface text-sm font-semibold text-primary-fg hover:bg-surface-pressed focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                  >
+                    {action.label}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </>

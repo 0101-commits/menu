@@ -1,13 +1,9 @@
-// 온디맨드 평점 조회 (Cloudflare Worker).
+// 온디맨드 평점 조회(Cloudflare Worker).
 //
-// 두 가지는 빌드 타임에 미리 채울 수 없다.
-//   구글  정책상 rating 등을 30 일 넘게 저장할 수 없다. 4,000 곳을 매달 전량 갱신하면
-//         무료 한도(월 1,000 건)를 훨씬 넘는다. 실제로 열어 본 곳만 받아 30 일 캐시한다.
-//   발견  저장 안 한 가게는 대상이 무한하다.
-//
-// 또 하나, 브라우저에서 네이버·카카오 플레이스를 직접 부를 수 없다(CORS). Worker 가 그 통로다.
-//
-// Worker 주소가 없으면 이 기능만 조용히 꺼진다. 앱의 나머지는 그대로 돈다.
+// 구글 목록 값은 Worker KV의 영구 시드를 읽는다. 값에는 수집 시각 at이 있고,
+// 30일보다 낡은 값을 본 순간 Worker가 응답 뒤 일부를 갱신한다. 공개 JSON에는 넣지 않는다.
+// 발견한 미저장 가게는 대상이 무한하고 브라우저가 네이버·카카오를 직접 부를 수 없어서
+// 상세 조회도 Worker를 통한다. Worker 주소가 없으면 이 두 기능만 조용히 꺼진다.
 
 import type { GoogleRating, Ratings } from '../types';
 
@@ -92,4 +88,24 @@ export async function fetchGoogleByIds(gids: string[]): Promise<Record<string, G
     }
   }
   return out;
+}
+
+export interface WorkerHealth {
+  ok: boolean;
+  google: boolean;
+  routes: string[];
+  builtAt: string;
+  commit: string;
+}
+
+/** Worker 배포본 상태. 키 값이나 평점 데이터는 받지 않는다. */
+export async function fetchWorkerHealth(): Promise<WorkerHealth> {
+  if (!RATINGS_API) throw new Error('NO_RATINGS_API');
+  const base = RATINGS_API.endsWith('/') ? RATINGS_API : `${RATINGS_API}/`;
+  const response = await fetch(new URL('health', base), {
+    signal: AbortSignal.timeout(8000),
+    cache: 'no-store',
+  });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  return response.json() as Promise<WorkerHealth>;
 }

@@ -196,3 +196,24 @@ GET https://m.place.naver.com/restaurant/{sid}/home
 - 7건은 네이버 플레이스가 지번 없이 도로명만 제공하는 경우 (`광주광역시 북구 서방로159번길 47` 등)
 
 `parseAddress`가 단순 split이라 4토큰 주소(`경기도 수원시 팔달구 신풍동`)에서도 3번째가 `"팔달구"`가 된다. 이건 기존부터 있던 UI 쪽 한계로, 데이터가 아니라 `PlaceList`에서 고칠 문제다.
+
+## 운영: 주간 동기화 실패 진단
+
+`.github/workflows/sync-myplace.yml`은 실패한 단계와 진단을 `sync-failure` 이슈 하나에 누적하고,
+다음 성공 실행에서 해당 이슈를 자동으로 닫는다.
+
+| 실패 단계 | 먼저 확인할 것 |
+|---|---|
+| 즐겨찾기 수집 | 로그의 `LOGIN_REQUIRED`; `NAVER_COOKIE` 만료 또는 Actions 러너 IP 무효 |
+| 신규 장소 보강 | `public/data/places.json` 존재, 네이버 플레이스 응답/레이트리밋 |
+| 외부 ID 매칭 | `KAKAO_REST_KEY`, 선택적 `GOOGLE_PLACES_KEY`, 매칭 게이트 |
+| places/ratings 게이트 | 데이터 급감·중복·파서 변경 리포트 |
+| 검증 | test/typecheck/build의 첫 실패 |
+
+2026-09-13과 09-20 실패는 쿠키 문제가 아니었다. 즐겨찾기 수집은 각각 4,090·4,098건으로
+성공했고, `enrich.mjs --only-new`가 이미 폐기된 `src/data/places.ts`를 열어 `ENOENT`로 실패했다.
+현재는 공용 `readPlaces()`를 통해 `public/data/places.json`을 읽는다.
+
+실패 이슈를 수동으로 닫아 완료처럼 만들지 않는다. 수정 후 workflow가 실제 성공해 자동 종료할 때
+복구 완료로 본다. Actions 러너 IP 때문에 `LOGIN_REQUIRED`가 반복되면 쿠키를 계속 바꾸기보다
+self-hosted runner 또는 로컬 `npm run sync`로 전환한다.

@@ -32,6 +32,9 @@ jobs:
 
       - run: npm ci
 
+      - name: 전체 테스트
+        run: npm run test
+
       - name: 타입 검사
         run: npm run typecheck
 

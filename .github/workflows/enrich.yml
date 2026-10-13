@@ -17,9 +17,9 @@ name: 데이터 보강
 #                      다음 달부터는 새로 늘어난 가게만 조회한다(월 수십 건).
 #   네이버 평점        무료. 비공식 경로라 간격을 벌려야 막히지 않는다(기본 1,100ms).
 #                      같은 HTML 에서 영업시간·메뉴도 같이 나온다 — 추가 호출이 없다.
-#   구글 평점          여기서 안 받는다. 30일 넘게 저장할 수 없어 배치로는 못 넣고,
-#                      카드를 열 때 Worker 가 받아 KV 에 30일 둔다.
-#                      (이 제약 때문에 일괄 수집은 안 한다. 비용이 아니라 약관 문제다.)
+#   구글 평점          여기서 안 받는다. 전량 시드는 google-seed.yml로 검증 후 KV에 올리고,
+#                      목록은 KV 값을 읽는다. 30일보다 낡은 값은 실제로 본 순간 Worker가
+#                      응답 뒤 일부만 갱신한다. 공개 ratings.json에는 넣지 않는다.
 
 on:
   schedule:
@@ -140,6 +140,9 @@ jobs:
       - name: ratings.json 갱신 + 게이트
         run: node scripts/build-ratings.mjs
 
+      - name: 데이터 메타데이터 생성
+        run: npm run build:meta
+
       - name: 규칙 검사
         run: npm run test
 
@@ -170,7 +173,7 @@ jobs:
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email 'github-actions[bot]@users.noreply.github.com'
-          git add public/data/places.json public/data/ratings.json
+          git add public/data/places.json public/data/ratings.json public/data/meta.json
           if git diff --cached --quiet; then
             echo '바뀐 데이터가 없습니다.' >> "$GITHUB_STEP_SUMMARY"
             exit 0
