@@ -26,9 +26,14 @@ export default defineConfig({
         display: 'standalone',
         background_color: '#f4f5f7',
         theme_color: '#c8362a',
+        // 안드로이드(Chrome WebAPK·삼성 인터넷)는 PNG 192·512 가 없으면 설치를 안 띄운다.
+        // SVG 만 있을 때 아이폰은 되고 갤럭시는 안 됐다. PNG 는 icon.svg 를 그대로 래스터화한 것,
+        // maskable 은 둥근 모서리만 뺀 판(핀이 안전 영역 80% 원 안에 이미 들어간다).
         icons: [
+          { src: 'pwa-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+          { src: 'pwa-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+          { src: 'maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
           { src: 'icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
-          { src: 'icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'maskable' },
         ],
       },
       workbox: {
