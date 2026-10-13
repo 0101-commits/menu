@@ -36,6 +36,15 @@ async function api(pathname) {
     if (res.status === 401 || (res.status >= 300 && res.status < 400)) {
       throw new Error('LOGIN_REQUIRED: NAVER_COOKIE 가 만료됐거나 이 IP에서 무효입니다');
     }
+    // 쿠키가 없거나 죽으면 네이버는 401 이 아니라 405 + apiErrorCode 1200("로그인정보가 없습니다")을 준다.
+    // 일반 오류로 보고 재시도하면 1분을 버리고 "HTTP 405" 만 남아 원인이 안 보인다(2026-10-11).
+    if (res.status === 405) {
+      const body = await res.text();
+      if (body.includes('"apiErrorCode":1200') || body.includes('로그인')) {
+        throw new Error('LOGIN_REQUIRED: NAVER_COOKIE 가 만료됐거나 이 IP에서 무효입니다 (405 로그인정보 없음)');
+      }
+      throw new Error(`HTTP 405 — ${pathname} ${body.slice(0, 200)}`);
+    }
     if (res.ok) {
       const text = await res.text();
       if (text.startsWith('<!DOCTYPE') || text.startsWith('<html')) {

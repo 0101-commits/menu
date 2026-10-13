@@ -3,20 +3,21 @@
 //
 // 왜 필요한가: 즐겨찾기 API 는 도로명 주소와 "음식점" 수준의 대분류만 준다.
 // PlaceList 의 시/도–시군구–동 3단 필터는 지번 토큰을 전제로 하고,
-// places.ts 의 mcidName 은 "카페,디저트" 같은 세분류다.
+// public/data/places.json 의 mcidName 은 "카페,디저트" 같은 세분류다.
 //
 // 소스: https://m.place.naver.com/restaurant/{sid}/home
 //   - 인증 불필요. 업종과 무관하게 /restaurant/ 경로로 조회된다(카페·주점 확인).
 //   - map.naver.com/p/api/place/summary 는 같은 값을 주지만 짧은 연속 호출에
 //     IP 차단(400/403)이 걸린다. 그래서 쓰지 않는다.
 //
-// 기본적으로 --only-new 로 돌린다. places.ts 에 이미 있는 장소는 지번 주소와
+// 기본적으로 --only-new 로 돌린다. places.json 에 이미 있는 장소는 지번 주소와
 // 세분류를 이미 갖고 있으므로 다시 받을 이유가 없다.
 //
 // 사용: node scripts/enrich.mjs --only-new
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { readPlaces } from './lib/places-io.mjs';
 
 const RAW_DIR = 'raw';
 const DELAY_MS = 1500; // 차단을 피하는 게 속도보다 중요하다
@@ -43,13 +44,13 @@ const done = fs.existsSync(outFile)
 
 let known = new Set();
 if (ONLY_NEW) {
-  const ts = fs.readFileSync('src/data/places.ts', 'utf8');
-  known = new Set([...ts.matchAll(/place\/(\d+)/g)].map((m) => m[1]));
+  // places.ts 는 places.json 으로 옮겨 갔다. 직접 열면 ENOENT 로 주간 동기화가 통째로 멈춘다.
+  known = new Set(readPlaces().map((p) => String(p.placeId)).filter(Boolean));
 }
 
 const todo = places.filter((p) => !done.has(p.sid) && !known.has(p.sid));
 console.log(`입력 ${inFile} — 장소 ${places.length}건`);
-if (ONLY_NEW) console.log(`places.ts 에 이미 있는 ${known.size}건은 건너뜁니다`);
+if (ONLY_NEW) console.log(`places.json 에 이미 있는 ${known.size}건은 건너뜁니다`);
 console.log(`보강 완료 ${done.size}건 / 이번에 받을 것 ${todo.length}건 (예상 ${Math.ceil((todo.length * DELAY_MS) / 60000)}분)`);
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));

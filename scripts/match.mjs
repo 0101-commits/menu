@@ -139,7 +139,10 @@ async function googleQuery(textQuery, place) {
     }),
     signal: AbortSignal.timeout(15000),
   });
-  if (res.status === 401 || res.status === 403) throw new Error('GOOGLE_AUTH: API 키·결제 설정을 확인하세요');
+  // 403 사유(API 미사용·키 제한·결제 중지)는 본문에만 있다. 본문에 키는 들어 있지 않다.
+  if (res.status === 401 || res.status === 403) {
+    throw new Error(`GOOGLE_AUTH: API 키·결제 설정을 확인하세요 — HTTP ${res.status} ${(await res.text()).slice(0, 400)}`);
+  }
   if (res.status === 429) throw new Error('RATE_LIMIT');
   if (!res.ok) throw new Error(`HTTP ${res.status} ${(await res.text()).slice(0, 160)}`);
   return (await res.json()).places ?? [];
