@@ -116,8 +116,13 @@ export function useBaseMap({ places, initialView, onSelect, onBoundsChange, onCl
         const reportBounds = () => {
           const bounds = map.getBounds();
           const center = map.getCenter();
+          // 가게마다 LatLng 를 만들어 contain 에 넣으면 멈출 때마다 4,084개를 새로 만든다. 숫자로 비교한다.
+          const sw = bounds.getSouthWest();
+          const ne = bounds.getNorthEast();
+          const [south, west, north, east] = [sw.getLat(), sw.getLng(), ne.getLat(), ne.getLng()];
           callbacks.current.onBoundsChange(
-            callbacks.current.places.filter((place) => bounds.contain(new kakao.maps.LatLng(place.lat, place.lng))),
+            callbacks.current.places.filter((place) =>
+              place.lat >= south && place.lat <= north && place.lng >= west && place.lng <= east),
             { lat: center.getLat(), lng: center.getLng() },
             map.getLevel(),
           );

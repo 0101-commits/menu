@@ -97,23 +97,24 @@ export function filterPlaces(input: Place[], filters: PlaceFilters): Place[] {
   return list;
 }
 
+/** 작을수록 앞. 정렬 기준이 없으면 null(입력 순서 유지). */
+function sortKeyOf({ sort, origin, ratings, means }: SortPlacesOptions): ((place: Place) => number) | null {
+  if (sort === 'distance' && origin) return (place) => haversine(origin.lat, origin.lng, place.lat, place.lng);
+  if (sort === 'rating') return (place) => -(summarize(ratings[place.placeId], means).combined ?? -1);
+  if (sort === 'reviews') return (place) => -summarize(ratings[place.placeId], means).totalReviews;
+  return null;
+}
+
 export function sortPlaces(input: Place[], options: SortPlacesOptions): Place[] {
-  const sorted = [...input];
-  if (options.sort === 'distance' && options.origin) {
-    const origin = options.origin;
-    sorted.sort((a, b) =>
-      haversine(origin.lat, origin.lng, a.lat, a.lng) -
-      haversine(origin.lat, origin.lng, b.lat, b.lng));
-  } else if (options.sort === 'rating') {
-    sorted.sort((a, b) =>
-      (summarize(options.ratings[b.placeId], options.means).combined ?? -1) -
-      (summarize(options.ratings[a.placeId], options.means).combined ?? -1));
-  } else if (options.sort === 'reviews') {
-    sorted.sort((a, b) =>
-      summarize(options.ratings[b.placeId], options.means).totalReviews -
-      summarize(options.ratings[a.placeId], options.means).totalReviews);
-  }
-  return sorted;
+  // 비교 함수 안에서 점수를 구하면 n log n 번(4,084곳이면 약 10만 번) 다시 계산한다.
+  // 지도를 멈출 때마다 이걸 돌아 평점순 132ms·리뷰순 172ms(데스크톱, 휴대폰은 4배 안팎)가 걸렸다.
+  // 가게마다 한 번만 구해 두고 숫자로 정렬한다. sort 는 안정 정렬이라 같은 값끼리 순서도 그대로다.
+  const keyOf = sortKeyOf(options);
+  if (!keyOf) return [...input];
+  return input
+    .map((place) => ({ place, key: keyOf(place) }))
+    .sort((a, b) => a.key - b.key)
+    .map(({ place }) => place);
 }
 
 export function buildPlaceResults(scope: PlaceScope, filters: PlaceFilters, sort: SortPlacesOptions): Place[] {
