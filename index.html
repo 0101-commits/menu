@@ -5,9 +5,20 @@
     <link rel="icon" type="image/svg+xml" href="./icon.svg" />
     <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
     <meta name="theme-color" content="#c8362a" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <!-- 화면 확대·축소를 막는다. 두 손가락으로 페이지를 키우면 고정된 시트·버튼이 화면 밖으로 밀려
+         레이아웃이 깨진 채로 남았다. 지도 확대는 카카오 SDK 가 직접 처리하므로 영향이 없다.
+         maximum-scale=1 은 아이폰이 16px 보다 작은 입력칸을 누를 때 저절로 확대하는 것도 막는다. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <meta name="description" content="네이버 즐겨찾기에 저장한 맛집을 지도에서 찾아봅니다." />
     <title>맛핀</title>
+    <!-- 카톡·메신저에 링크를 붙였을 때 뜨는 미리보기. 이미지는 절대 주소여야 한다. -->
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="맛핀" />
+    <meta property="og:description" content="저장한 맛집을 지도 한 장에. 세 지도의 평점을 한 번에 비교합니다." />
+    <meta property="og:image" content="https://0101-commits.github.io/menu/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
 
     <!-- 본문 글꼴. dynamic-subset 은 화면에 실제로 쓰인 글자가 든 청크만 받아오므로
          첫 화면 비용이 수십 KB 다. 로컬에 Pretendard 가 깔린 기기는 이 요청조차 안 한다. -->
@@ -29,9 +40,13 @@
           document.documentElement.setAttribute('data-seed-user-color-scheme', 'light');
         }
       })();
+
+      // 아이폰 사파리는 user-scalable=no 를 무시한다(접근성 정책). 사파리 전용 제스처 이벤트를
+      // 막아야 페이지 핀치 확대가 멈춘다. 지도 핀치는 터치 이벤트로 따로 처리돼 그대로 된다.
+      document.addEventListener('gesturestart', function (e) { e.preventDefault(); }, { passive: false });
     </script>
 
-    <script type="text/javascript" src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=489abbeb60a4ef5ff58d960dcaeecb4e&libraries=clusterer,services"></script>
+    <script type="text/javascript" src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=489abbeb60a4ef5ff58d960dcaeecb4e&libraries=services"></script>
   </head>
   <body>
     <div id="root"></div>

@@ -36,32 +36,23 @@ interface Options {
 export function usePlaceLayers(options: Options) {
   const appliedNumbers = useRef<Map<string, number>>(new Map());
   const numberImages = useRef<Map<string, KakaoObject>>(new Map());
+  /** 지금 선택돼 있는 가게. 선택 effect 가 갱신한다. */
   const previousSelected = useRef<Place | null>(null);
   const info = useRef<{ overlay: KakaoObject; root: Root; element: HTMLDivElement } | null>(null);
   const callbacks = useRef({ onSelect: options.onSelect });
   callbacks.current = { onSelect: options.onSelect };
 
   useEffect(() => {
-    const clusterer = options.runtime.clustererRef.current;
-    if (!clusterer || !options.runtime.markersRef.current.length) return;
-    const all = options.runtime.markersRef.current.map((item) => item.marker);
-    const visible = options.runtime.markersRef.current
-      .filter(({ place }) => !options.selectedCategories.length || options.selectedCategories.includes(place.category))
-      .map((item) => item.marker);
-    clusterer.removeMarkers(all, true);
-    clusterer.addMarkers(visible);
+    if (options.status !== 'ready') return;
+    options.runtime.dotLayerRef.current?.setFilter(options.selectedCategories);
   }, [options.selectedCategories, options.status, options.runtime]);
 
-  const baseImage = useCallback((place: Place) => {
+  const numberImage = useCallback((place: Place, number: number) => {
     const kakao = options.runtime.kakaoRef.current;
-    const images = options.runtime.imagesRef.current;
-    if (!kakao || !images) return null;
-    const number = appliedNumbers.current.get(place.placeId);
     const color = colorOf(place.category);
-    if (!number) return images.normal.get(color);
     const key = `${color}:${number}`;
     let image = numberImages.current.get(key);
-    if (!image) {
+    if (!image && kakao) {
       image = new kakao.maps.MarkerImage(numberPinSvg(color, number), new kakao.maps.Size(26, 36), {
         offset: new kakao.maps.Point(13, 36),
       });
@@ -70,19 +61,39 @@ export function usePlaceLayers(options: Options) {
     return image;
   }, [options.runtime]);
 
+  // 선택에서 풀렸거나 번호가 바뀐 가게를 제자리로 — 번호가 있으면 번호 핀, 없으면 마커를 내리고
+  // 캔버스가 다시 점·핀으로 그린다. 번호 핀은 캔버스보다 위 층이라 점에 덮이지 않는다.
+  const settle = useCallback((place: Place) => {
+    const marker = options.runtime.markerByPlaceId.current.get(place.placeId);
+    if (!marker) return;
+    const number = appliedNumbers.current.get(place.placeId);
+    if (!number) { marker.setMap(null); return; }
+    marker.setImage(numberImage(place, number));
+    marker.setZIndex(2);
+    marker.setMap(options.runtime.mapRef.current);
+  }, [options.runtime, numberImage]);
+
+  // 카카오 마커로 따로 띄운 가게(번호·선택)는 캔버스에서 뺀다.
+  const syncHidden = useCallback(() => {
+    const ids = new Set(appliedNumbers.current.keys());
+    if (previousSelected.current) ids.add(previousSelected.current.placeId);
+    options.runtime.dotLayerRef.current?.setHidden(ids);
+  }, [options.runtime]);
+
   useEffect(() => {
-    if (options.status !== 'ready' || !options.runtime.imagesRef.current) return;
+    if (options.status !== 'ready') return;
     const next = numberAssignments(options.numbered ?? []);
-    const placeById = new Map(options.runtime.markersRef.current.map((item) => [item.place.placeId, item.place]));
     const touched = new Set([...appliedNumbers.current.keys(), ...next.keys()]);
     appliedNumbers.current = next;
     for (const placeId of touched) {
       if (options.selectedPlace?.placeId === placeId) continue;
-      const place = placeById.get(placeId);
-      const marker = options.runtime.markerByPlaceId.current.get(placeId);
-      if (place && marker) marker.setImage(baseImage(place));
+      const place = options.runtime.placeById.current.get(placeId);
+      if (!place) continue;
+      if (next.has(placeId)) options.runtime.markerFor(place);
+      settle(place);
     }
-  }, [options.numbered, options.status, options.selectedPlace, options.runtime, baseImage]);
+    syncHidden();
+  }, [options.numbered, options.status, options.selectedPlace, options.runtime, settle, syncHidden]);
 
   const centerForPopup = useCallback((position: KakaoObject) => {
     const map = options.runtime.mapRef.current;
@@ -113,12 +124,9 @@ export function usePlaceLayers(options: Options) {
     if (!kakao || !map || !images || options.status !== 'ready') return;
 
     const previous = previousSelected.current;
-    if (previous) {
-      const marker = options.runtime.markerByPlaceId.current.get(previous.placeId);
-      marker?.setImage(baseImage(previous));
-      marker?.setZIndex(0);
-    }
     previousSelected.current = options.selectedPlace;
+    if (previous) settle(previous);
+    syncHidden();
 
     if (!options.selectedPlace) {
       info.current?.overlay.setMap(null);
@@ -126,9 +134,10 @@ export function usePlaceLayers(options: Options) {
     }
 
     options.onClearTransient();
-    const marker = options.runtime.markerByPlaceId.current.get(options.selectedPlace.placeId);
+    const marker = options.runtime.markerFor(options.selectedPlace);
     marker?.setImage(images.selected.get(colorOf(options.selectedPlace.category)));
     marker?.setZIndex(10);
+    marker?.setMap(map);
 
     const position = new kakao.maps.LatLng(options.selectedPlace.lat, options.selectedPlace.lng);
     centerForPopup(position);
@@ -139,7 +148,8 @@ export function usePlaceLayers(options: Options) {
       info.current = {
         element,
         root: createRoot(element),
-        overlay: new kakao.maps.CustomOverlay({ position, content: element, xAnchor: 0, yAnchor: 0, zIndex: 20 }),
+        // clickable: 이름표·말풍선을 누른 것이 지도 클릭으로 새면 그 밑의 다른 점이 골라진다.
+        overlay: new kakao.maps.CustomOverlay({ position, content: element, xAnchor: 0, yAnchor: 0, zIndex: 20, clickable: true }),
       };
     }
     info.current.overlay.setPosition(position);

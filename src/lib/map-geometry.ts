@@ -24,15 +24,16 @@ export function popupCenterShift(
   return Math.abs(shift) > 1 ? shift : 0;
 }
 
-export function dominantColor(colors: Array<string | undefined>): string | null {
-  const tally = new Map<string, number>();
-  for (const color of colors) if (color) tally.set(color, (tally.get(color) ?? 0) + 1);
-  let top: string | null = null;
-  let count = 0;
-  for (const [color, n] of tally) {
-    if (n > count) { top = color; count = n; }
-  }
-  return top;
+export type MarkerTier = 'pin' | 'dot' | 'dotSmall';
+
+/**
+ * 지도 레벨별 핀 모양. 숫자 묶음(클러스터) 대신 네이버 지도처럼 모든 가게를 제자리에 찍되,
+ * 멀어질수록 작은 점으로 그려 수천 곳이 겹쳐도 바탕 지도가 덮이지 않게 한다.
+ */
+export function markerTier(level: number): MarkerTier {
+  if (level <= 4) return 'pin';
+  if (level <= 6) return 'dot';
+  return 'dotSmall';
 }
 
 export function numberAssignments(ids: string[], limit = 20): Map<string, number> {

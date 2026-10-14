@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { dominantColor, nearbyRadiusForLevel, numberAssignments, popupCenterShift } from './map-geometry';
+import { markerTier, nearbyRadiusForLevel, numberAssignments, popupCenterShift } from './map-geometry';
 
 describe('map geometry', () => {
   it.each([[2, 30], [3, 60], [4, 120], [5, 250], [6, 500], [7, 800]])(
@@ -16,9 +16,11 @@ describe('map geometry', () => {
     expect(popupCenterShift(800, 600, 224, 28)).toBeNull();
   });
 
-  it('가장 많은 클러스터 색을 고른다', () => {
-    expect(dominantColor(['#1', '#2', '#1', undefined])).toBe('#1');
-  });
+  it.each([[1, 'pin'], [4, 'pin'], [5, 'dot'], [6, 'dot'], [7, 'dotSmall'], [14, 'dotSmall']])(
+    '지도 레벨 %i의 핀 모양은 %s', (level, tier) => {
+      expect(markerTier(level)).toBe(tier);
+    },
+  );
 
   it('번호 할당을 상한에서 자른다', () => {
     expect([...numberAssignments(['a', 'b', 'c'], 2)]).toEqual([['a', 1], ['b', 2]]);

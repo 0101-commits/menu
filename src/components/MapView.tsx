@@ -3,7 +3,7 @@
 // 여기서는 로딩/오류/현재위치/주변목록 UI만 렌더한다.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Compass, Loader2, LocateFixed, X } from 'lucide-react';
+import { Loader2, LocateFixed, X } from 'lucide-react';
 import type { Discovered, Place, RatingsMap } from '../types';
 import type { SourceMeans } from '../lib/rating';
 import { colorOf } from '../lib/categories';
@@ -208,7 +208,7 @@ export function MapView({
       {base.status === 'error' && (
         <div className="absolute inset-0 grid place-items-center bg-surface-sunken z-50 p-6" role="alert">
           <div className={`text-center ${PANEL} p-6 max-w-sm`}>
-            <Compass className="w-8 h-8 mx-auto mb-3 text-fg-subtle" aria-hidden="true" />
+            <img src={`${import.meta.env.BASE_URL}illust/map-error.svg`} alt="" width={128} height={96} className="mx-auto mb-3" />
             <p className="font-bold text-lg mb-2 text-fg">지도를 불러오지 못했습니다</p>
             <p className="text-sm text-fg-muted m-0">
               이 주소({typeof window !== 'undefined' ? window.location.origin : ''})가 카카오 개발자 콘솔에 등록돼 있는지 확인해 주세요. 네트워크 문제일 수도 있습니다.

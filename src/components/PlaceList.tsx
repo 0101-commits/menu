@@ -4,7 +4,7 @@
 // 화면에 닿는 만큼만 그리고 바닥에 닿으면 늘린다. 라이브러리를 넣을 일은 아니다.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { MapPinOff, X } from 'lucide-react';
+import { X } from 'lucide-react';
 import type { Place, RatingsMap } from '../types';
 import { PlaceCard } from './PlaceCard';
 import { haversine } from '../lib/geo';
@@ -155,7 +155,7 @@ export function PlaceList({
         {pinnedCard}
         <div className="flex-1 grid place-items-center p-6 text-center" role="status" aria-live="polite">
           <div>
-            <MapPinOff className="w-8 h-8 mx-auto mb-3 text-fg-subtle" aria-hidden="true" />
+            <img src={`${import.meta.env.BASE_URL}illust/empty.svg`} alt="" width={128} height={96} className="mx-auto mb-3" />
             <p className="text-sm text-fg-muted m-0">찾는 맛집이 없습니다</p>
             {emptyHint && <p className="text-xs text-fg-subtle m-0 mt-1">{emptyHint}</p>}
             {emptyActions.length > 0 && (

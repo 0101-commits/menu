@@ -42,6 +42,8 @@ export function useDiscoveryLayer({
       });
       kakao.maps.event.addListener(marker, 'click', () => {
         runtime.suppressClick.current = true;
+        // SDK 가 마커 클릭 뒤 지도 클릭을 이미 막으므로 플래그가 소비되지 않을 수 있다. 남겨 두면 다음 진짜 탭을 삼킨다.
+        setTimeout(() => { runtime.suppressClick.current = false; }, 0);
         onClearNearby();
         setOpenDiscovered(item);
         callbacks.current.onOpen(item);
@@ -72,7 +74,8 @@ export function useDiscoveryLayer({
       overlay.current = {
         element,
         root: createRoot(element),
-        overlay: new kakao.maps.CustomOverlay({ position, content: element, xAnchor: 0, yAnchor: 0, zIndex: 20 }),
+        // clickable: 말풍선을 누른 것이 지도 클릭으로 새어 밑의 점을 고르지 않게.
+        overlay: new kakao.maps.CustomOverlay({ position, content: element, xAnchor: 0, yAnchor: 0, zIndex: 20, clickable: true }),
       };
     }
     const current = overlay.current;

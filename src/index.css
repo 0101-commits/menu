@@ -18,6 +18,15 @@
   body {
     overscroll-behavior-y: none;
   }
+
+  /* 페이지 확대·축소를 막는다(index.html 의 viewport 와 짝). pan-x pan-y 는 스크롤만 남기고
+   * 핀치·두 번 탭 확대를 뺀다. 지도는 SDK 가 터치를 직접 받아 계속 확대된다.
+   * text-size-adjust 는 가로로 돌렸을 때 글자가 제멋대로 커지는 것을 막는다. */
+  html {
+    touch-action: pan-x pan-y;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
 }
 
 @layer utilities {
