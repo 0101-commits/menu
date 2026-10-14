@@ -14,6 +14,8 @@ import { ListPanel } from './components/ListPanel';
 import { DataPanel } from './components/DataPanel';
 import { GOOGLE_ENABLED } from './lib/worker';
 import { readUrl } from './lib/url-state';
+import type { Place } from './types';
+import { matchShared, readShare } from './lib/share';
 import { useVisits } from './lib/visits';
 import { useAppData } from './hooks/useAppData';
 import { useDiscovery } from './hooks/useDiscovery';
@@ -77,8 +79,43 @@ export default function App() {
     region: search.region,
   });
 
+  // 상세를 열 때의 목록을 붙잡아 두고 그 안에서 이전·다음으로 넘긴다. 넘길 때마다 지도가 그 가게로
+  // 옮겨 가 목록이 다시 정렬되는데, 지금 목록을 그대로 쓰면 순서가 흔들려 봤던 가게로 되돌아간다.
+  const detailListRef = useRef<Place[]>([]);
+  const detailId = map.detailPlace?.placeId;
+  const detailList = useMemo(() => {
+    if (!detailId) return (detailListRef.current = []);
+    if (!detailListRef.current.some((place) => place.placeId === detailId)) detailListRef.current = search.filtered;
+    return detailListRef.current;
+    // 목록이 바뀔 때가 아니라 상세 가게가 바뀔 때만 다시 붙잡는다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [detailId]);
+  const detailIndex = detailList.findIndex((place) => place.placeId === detailId);
+  const detailNav = detailIndex < 0 || detailList.length < 2 ? undefined : {
+    onPrev: detailIndex > 0 ? () => map.handleDetail(detailList[detailIndex - 1]) : undefined,
+    onNext: detailIndex < detailList.length - 1 ? () => map.handleDetail(detailList[detailIndex + 1]) : undefined,
+    position: `${detailIndex + 1}/${detailList.length}`,
+  };
+
+  // 다른 앱에서 「공유」로 열렸으면(manifest share_target) 받은 글에서 저장한 가게를 찾아 연다.
+  // 없으면 그 이름으로 검색하고 발견 모드를 켜 — 저장 안 한 가게도 지도에 뜨게 한다.
+  const shared = useRef(readShare()).current;
+  const sharedDone = useRef(false);
+  useEffect(() => {
+    if (!shared || sharedDone.current || !data.places.length) return;
+    sharedDone.current = true;
+    const hit = matchShared(shared, data.places);
+    if (hit?.kind === 'place') map.handleDetail(hit.place);
+    else if (hit?.kind === 'search') { void search.runSearch(hit.text); discovery.setDiscover(true); }
+    else search.setSearchNotice('공유한 내용에서 가게 이름을 찾지 못했습니다. 이름으로 검색해 주세요.');
+    // 장소 목록이 처음 들어왔을 때 한 번만.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data.places]);
+
   const requestDetailGoogle = data.requestDetailGoogle;
   useEffect(() => { requestDetailGoogle(map.detailPlace); }, [requestDetailGoogle, map.detailPlace]);
+  const requestDetails = data.requestDetails;
+  useEffect(() => { if (map.detailPlace) requestDetails(); }, [requestDetails, map.detailPlace]);
 
   const pickRandom = () => {
     if (!search.filtered.length) return;
@@ -216,12 +253,14 @@ export default function App() {
           <PlaceSheet
             place={map.detailPlace}
             ratings={data.ratings[map.detailPlace.placeId]}
+            details={data.details[map.detailPlace.placeId]}
             means={data.means}
             googleEnabled={GOOGLE_ENABLED}
             onClose={closeDetail}
             visit={visits[map.detailPlace.placeId]}
             onToggleVisit={toggleVisit}
             onNote={setNote}
+            nav={detailNav}
           />
         ) : (
           <>
@@ -349,12 +388,14 @@ export default function App() {
           <PlaceSheet
             place={map.detailPlace}
             ratings={data.ratings[map.detailPlace.placeId]}
+            details={data.details[map.detailPlace.placeId]}
             means={data.means}
             googleEnabled={GOOGLE_ENABLED}
             onClose={closeDetail}
             visit={visits[map.detailPlace.placeId]}
             onToggleVisit={toggleVisit}
             onNote={setNote}
+            nav={detailNav}
           />
         </aside>
       )}

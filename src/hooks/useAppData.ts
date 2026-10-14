@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { GoogleRating, Place, RatingsMap } from '../types';
+import type { DetailsMap, GoogleRating, Place, RatingsMap } from '../types';
 import type { MetaState } from '../lib/meta';
-import { loadMeta, loadPlaces, loadRatings } from '../lib/data';
+import { loadDetails, loadMeta, loadPlaces, loadRatings } from '../lib/data';
 import { computeMeans, rawOf } from '../lib/rating';
 import { GOOGLE_ENABLED, fetchGoogleByIds, fetchRatings } from '../lib/worker';
 
@@ -68,6 +68,16 @@ export function useAppData() {
       .catch(() => undefined);
   }, [ratings]);
 
+  // 상세를 처음 열 때 한 번만 받는다. 첫 화면에는 필요 없다.
+  const [details, setDetails] = useState<DetailsMap>({});
+  const askedDetails = useRef(false);
+  const requestDetails = useCallback(() => {
+    if (askedDetails.current) return;
+    askedDetails.current = true;
+    // 못 받았으면(오프라인 등) 다음에 상세를 열 때 다시 받는다. 없어도 상세는 열린다.
+    void loadDetails().then(setDetails).catch(() => { askedDetails.current = false; });
+  }, []);
+
   const means = useMemo(() => computeMeans(ratings), [ratings]);
   const googleReady = Boolean(Object.keys(googleById).length);
   const withScore = useMemo(
@@ -77,6 +87,6 @@ export function useAppData() {
 
   return {
     places, ratings, means, dataState, ratingsLoading, metaState,
-    googleReady, withScore, requestGoogle, requestDetailGoogle,
+    googleReady, withScore, requestGoogle, requestDetailGoogle, details, requestDetails,
   };
 }

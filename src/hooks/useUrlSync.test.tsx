@@ -32,6 +32,16 @@ describe('useUrlSync', () => {
     expect(window.location.search).toContain('place=1');
   });
 
+  it('열린 상세에서 다른 가게로 넘기면 쌓지 않고 덮어쓴다(닫기 한 번에 목록으로)', () => {
+    const second = place({ placeId: '2', id: 2 });
+    const { result } = renderHook(useHarness);
+    act(() => result.current.setDetailPlace(first));
+    const push = vi.spyOn(window.history, 'pushState');
+    act(() => result.current.setDetailPlace(second));
+    expect(push).not.toHaveBeenCalled();
+    expect(window.location.search).toContain('place=2');
+  });
+
   it('popstate에서 place가 없으면 상세을 닫고 half로 돌아간다', () => {
     const { result } = renderHook(useHarness);
     act(() => result.current.setDetailPlace(first));

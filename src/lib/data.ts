@@ -3,7 +3,7 @@
 // 예전에는 src/data/places.ts가 1.19MB TS 모듈이라 첫 JS 번들에 통째로 실렸다.
 // 정적 JSON으로 내보내고 앱이 시작할 때 받는다. 평점과 메타는 목록 뒤에 합류해도 된다.
 
-import type { Place, RatingsMap } from '../types';
+import type { DetailsMap, Place, RatingsMap } from '../types';
 import type { DataMeta } from './meta';
 
 const base = import.meta.env.BASE_URL;
@@ -22,6 +22,11 @@ export function loadPlaces(): Promise<Place[]> {
 export async function loadRatings(): Promise<RatingsMap> {
   try { return await getJson<RatingsMap>('data/ratings.json'); }
   catch { return {}; }
+}
+
+/** 상세 보조 정보(AI 요약·붐비는 시간). 상세를 처음 열 때 받는다. 실패는 부르는 쪽이 다시 시도한다. */
+export function loadDetails(): Promise<DetailsMap> {
+  return getJson<DetailsMap>('data/details.json');
 }
 
 /** 메타는 보조 정보다. 실패를 장소 로딩 실패로 승격하지 않는다. */

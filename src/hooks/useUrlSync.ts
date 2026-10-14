@@ -39,7 +39,9 @@ export function useUrlSync({
 
   useEffect(() => {
     const place = detailPlace?.placeId;
-    const opened = Boolean(place) && place !== lastPlaceRef.current;
+    // 닫힌 상태에서 열 때만 쌓는다. 열린 채 다른 가게로 바뀌면(좌우 넘기기·지도에서 다른 가게) 덮어쓴다 —
+    // 넘길 때마다 쌓으면 닫기(= 뒤로 가기)가 닫히지 않고 직전 가게로 돌아간다.
+    const opened = Boolean(place) && !lastPlaceRef.current;
     lastPlaceRef.current = place;
     if (opened) pushedRef.current = true;
     if (!place) pushedRef.current = false;

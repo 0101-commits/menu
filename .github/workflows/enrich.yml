@@ -173,7 +173,7 @@ jobs:
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email 'github-actions[bot]@users.noreply.github.com'
-          git add public/data/places.json public/data/ratings.json public/data/meta.json
+          git add public/data/places.json public/data/ratings.json public/data/meta.json public/data/details.json
           if git diff --cached --quiet; then
             echo '바뀐 데이터가 없습니다.' >> "$GITHUB_STEP_SUMMARY"
             exit 0

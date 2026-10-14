@@ -24,6 +24,9 @@ export default defineConfig({
         start_url: base,
         scope: base,
         display: 'standalone',
+        // 안드로이드에서 설치한 맛핀이 다른 앱의 「공유」 목록에 뜬다. 받은 글은 시작 주소의
+        // ?title=&text=&url= 로 오고 src/lib/share.ts 가 저장한 가게를 찾는다. 아이폰 사파리는 이 기능이 없다.
+        share_target: { action: base, method: 'GET', params: { title: 'title', text: 'text', url: 'url' } },
         background_color: '#f4f5f7',
         theme_color: '#c8362a',
         // 안드로이드(Chrome WebAPK·삼성 인터넷)는 PNG 192·512 가 없으면 설치를 안 띄운다.
@@ -49,7 +52,8 @@ export default defineConfig({
             handler: 'StaleWhileRevalidate',
             options: {
               cacheName: 'matpin-data',
-              expiration: { maxEntries: 4, maxAgeSeconds: 30 * 24 * 60 * 60 },
+              // places·ratings·meta·details 넷에 여유 둘.
+              expiration: { maxEntries: 6, maxAgeSeconds: 30 * 24 * 60 * 60 },
             },
           },
         ],

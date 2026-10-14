@@ -159,15 +159,46 @@ export async function fetchNaver(sid, fetchImpl = fetch) {
 
 // ---------- 카카오 ----------
 
+/**
+ * 하루치 영업시간. 쉬는 시간이 있으면 네이버 파서와 같은 꼴로 붙인다.
+ *   "07:00 ~ 19:00 (브레이크 14:00 ~ 15:00)"
+ * 카카오는 "14:00 ~ 15:00 브레이크타임" 처럼 말을 덧붙여 주므로 시각 범위만 떼어 온다.
+ */
+function kakaoDay(d) {
+  const span = d?.on_days?.start_end_time_desc ?? '';
+  const breaks = (d?.on_days?.break_times_desc ?? [])
+    .map((b) => (String(b).match(/\d{1,2}:\d{2}\s*~\s*\d{1,2}:\d{2}/) ?? [])[0])
+    .filter(Boolean);
+  return span && breaks.length ? `${span} (브레이크 ${breaks.join(', ')})` : span;
+}
+
+/**
+ * 시간대별 방문(카카오 visitor.weekly_uv_average, 요일 평균 24칸, 자료 없는 시각은 -1).
+ * 앞뒤의 빈 시각을 잘라 { from: 첫 시각, v: [0~100] } 로 줄인다 — 화면은 가장 붐비는 때와의
+ * 비율만 그리므로 원래 숫자는 필요 없다. 가운데 빈 칸(쉬는 시간)은 0 이다.
+ */
+function busyOf(uv) {
+  if (!Array.isArray(uv) || uv.length !== 24) return null;
+  const first = uv.findIndex((x) => x > 0);
+  if (first < 0) return null;
+  const last = uv.length - 1 - [...uv].reverse().findIndex((x) => x > 0);
+  const max = Math.max(...uv);
+  return { from: first, v: uv.slice(first, last + 1).map((x) => (x > 0 ? Math.round((x / max) * 100) : 0)) };
+}
+
 export function parseKakao(j) {
   const ss = j?.kakaomap_review?.score_set ?? {};
   const sym = j?.ai_mate?.price_level?.symbol;
   const status = j?.summary?.status;
   const regions = (j?.summary?.regions ?? []).reduce((a, r) => ({ ...a, [r.depth]: r.name }), {});
+  const ai = j?.ai_mate?.summary;
+  const busy = busyOf(j?.visitor?.weekly_uv_average);
 
   // 영업시간은 주 단위 표 전체가 크다. 요일별 "시작~끝" 문자열만 남긴다.
-  const days = j?.open_hours?.week_from_today?.week_periods?.[0]?.days ?? [];
-  const rawHours = days.map((d) => d?.on_days?.start_end_time_desc ?? '');
+  // week_periods 는 휴무일을 사이에 두고 여러 묶음으로 온다(수~토 / 일 휴무 / 월~화).
+  // 첫 묶음만 읽으면 휴무일 앞에서 끊긴다 — 2026-10-14 실측 3,233곳 중 1,128곳이 7일보다 짧았다.
+  const days = (j?.open_hours?.week_from_today?.week_periods ?? []).flatMap((p) => p?.days ?? []).slice(0, 7);
+  const rawHours = days.map(kakaoDay);
   // 칸이 전부 비어 있으면 "매일 휴무" 가 아니라 시간 정보가 없는 것이다.
   // 그대로 두면 화면에 "오늘 휴무" 로 뜬다. 실측 17건 중 3건이 이랬다.
   const hours = rawHours.some((h) => h.trim()) ? rawHours : undefined;
@@ -200,6 +231,20 @@ export function parseKakao(j) {
     ...(regions[1] ? { region: [regions[1], regions[2], regions[3]].filter(Boolean) } : {}),
     photos: j?.photos?.counts?.total ?? 0,
     ...(j?.summary?.name ? { name: j.summary.name } : {}),
+    // 카카오 AI 장소 요약(kanana). 제목 한 줄과 짧은 근거 3개만. 화면은 출처·주의 문구 없이 띄우지 않는다.
+    // 비공식 응답이라 모양이 바뀔 수 있다. 글자가 아닌 값이 들어가면 화면이 그대로 그리다 멈춘다.
+    ...(typeof ai?.title === 'string' && ai.title.trim()
+      ? {
+          ai: {
+            title: ai.title.trim().slice(0, 60),
+            points: (Array.isArray(ai.contents) ? ai.contents : [])
+              .filter((x) => typeof x === 'string' && x.trim())
+              .slice(0, 3)
+              .map((x) => x.trim().slice(0, 40)),
+          },
+        }
+      : {}),
+    ...(busy ? { busy } : {}),
   };
 }
 

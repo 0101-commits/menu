@@ -11,6 +11,9 @@ import { readPlaces, readJson, writeJson, args } from './lib/places-io.mjs';
 const A = args();
 const IN = 'raw/ratings.json';
 const OUT = 'public/data/ratings.json';
+// 상세를 열 때만 쓰는 것(카카오 AI 요약·시간대별 방문)은 따로 둔다. 첫 화면이 받는 ratings.json 을
+// 키우지 않으려는 것이다 — 앱은 상세를 처음 열 때 이 파일을 받는다.
+const DETAILS_OUT = 'public/data/details.json';
 
 /** 한국 시간 기준 요일(0=일). KST 는 UTC+9 고정이고 서머타임이 없다. */
 function seoulDay(at) {
@@ -28,6 +31,7 @@ const known = new Map(places.map((p) => [p.placeId, p]));
 const withKakaoId = places.filter((p) => p.kakaoId).length;
 
 const out = {};
+const details = {};
 const stat = {
   entries: 0, naverScore: 0, naverNoScore: 0, naverFail: 0, naverGone: 0,
   kakaoScore: 0, kakaoFail: 0, closed: 0, orphan: 0,
@@ -84,6 +88,7 @@ for (const [sid, v] of Object.entries(raw)) {
         ...(k.rank ? { rank: k.rank } : {}),
         ...(k.closed ? { closed: true } : {}),
       };
+      if (k.ai || k.busy) details[sid] = { ...(k.ai ? { ai: k.ai } : {}), ...(k.busy ? { busy: k.busy } : {}) };
     }
   }
 
@@ -146,6 +151,13 @@ const shrank = (key, now) => {
 };
 const naverShrink = shrank('naver', Object.values(out).filter((v) => v.naver).length);
 const kakaoShrink = shrank('kakao', Object.values(out).filter((v) => v.kakao).length);
+// details.json 도 같은 사고를 막되, 게이트로 막지는 않는다. 요약·방문은 덤이라 카카오가 이 칸을
+// 빼는 날 평점·영업시간 갱신까지 멈추면 안 된다. 요약과 방문을 따로 세어 20% 넘게 줄면
+// 이전 details.json 을 그대로 두고 ratings.json 만 쓴다.
+const prevDetailsMap = readJson(DETAILS_OUT, {});
+const countOf = (map, key) => Object.values(map).filter((d) => d[key]).length;
+const detailsShrunk = ['ai', 'busy'].filter((key) => countOf(details, key) < countOf(prevDetailsMap, key) * 0.8);
+const detailsCount = Object.keys(details).length;
 
 const gates = [
   ['네이버 파싱 실패율 < 1%', naverFailRate < 0.01, `${(naverFailRate * 100).toFixed(2)}% (${stat.naverFail}/${naverTried})`],
@@ -160,7 +172,14 @@ console.log(`네이버: 점수 ${stat.naverScore} · 점수없음 ${stat.naverNo
 console.log(`카카오: 점수 ${stat.kakaoScore} · 실패 ${stat.kakaoFail} (kakaoId 보유 장소 ${withKakaoId}건)`);
 console.log(`영업시간: 카카오 ${stat.hours.kakao} + 네이버 ${stat.hours.naver} + 복원 ${stat.hours.restored} = ${stat.hours.kakao + stat.hours.naver + stat.hours.restored}건`);
 console.log(`대표메뉴: 카카오 ${stat.menus.kakao} + 네이버 ${stat.menus.naver} + 복원 ${stat.menus.restored} = ${stat.menus.kakao + stat.menus.naver + stat.menus.restored}건`);
+console.log(`상세: AI 요약 ${Object.values(details).filter((d) => d.ai).length} · 시간대별 방문 ${Object.values(details).filter((d) => d.busy).length}`);
 console.log(`폐업 의심 ${closedList.length}건`);
+if (detailsShrunk.length) {
+  console.warn(
+    `::warning::상세가 이전보다 20% 넘게 줄어 details.json 은 이전 것을 유지합니다 — ` +
+      detailsShrunk.map((key) => `${key} ${countOf(prevDetailsMap, key)} → ${countOf(details, key)}`).join(', '),
+  );
+}
 
 console.log('\n게이트');
 for (const [n, pass, d] of gates) console.log(`  ${pass ? 'PASS' : 'FAIL'}  ${n}${d ? ` — ${d}` : ''}`);
@@ -191,4 +210,6 @@ if (failed.length) { console.error(`\n게이트 ${failed.length}건 실패 — r
 if (A.dry) { console.log('\n--dry 이므로 쓰지 않았습니다.'); process.exit(0); }
 
 writeJson(OUT, out);
+if (!detailsShrunk.length) writeJson(DETAILS_OUT, details);
 console.log(`\n${OUT} — ${stat.entries}건 · ${(fs.statSync(OUT).size / 1024).toFixed(0)}KB`);
+if (!detailsShrunk.length) console.log(`${DETAILS_OUT} — ${detailsCount}건 · ${(fs.statSync(DETAILS_OUT).size / 1024).toFixed(0)}KB`);

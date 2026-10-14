@@ -34,6 +34,7 @@ interface Props {
 const STATE_CLASS: Record<string, string> = {
   open: 'text-[var(--matpin-open)]',
   'closing-soon': 'text-[var(--matpin-closing)]',
+  break: 'text-[var(--matpin-closing)]',
   closed: 'text-fg-subtle',
   dayoff: 'text-fg-subtle',
   unknown: 'text-fg-subtle',

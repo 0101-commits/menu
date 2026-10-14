@@ -14,10 +14,13 @@
 //   2) 24:00 을 넘기는 표기(예: "18:00 ~ 02:00")는 자정을 넘긴 영업이다. 그대로 다루면
 //      새벽 1시에 "영업 종료" 로 잘못 나온다.
 //
+// 쉬는 시간은 두 소스 모두 같은 꼴로 뒤에 붙는다: "07:00 ~ 19:00 (브레이크 14:00 ~ 15:00)".
+// 이걸 안 보면 14시 반에 「영업 중」이라고 보내 문 닫은 가게 앞에 세운다(10-14 실측).
+//
 // 판정은 전부 한국 시간으로 한다. 서울 가게가 지금 여는지를 보는 사람 현지 시각으로
 // 따지면 안 된다. KST 는 UTC+9 고정이고 서머타임이 없어 오프셋만 더하면 된다.
 
-export type OpenState = 'open' | 'closing-soon' | 'closed' | 'dayoff' | 'unknown';
+export type OpenState = 'open' | 'closing-soon' | 'break' | 'closed' | 'dayoff' | 'unknown';
 
 export interface OpenStatus {
   state: OpenState;
@@ -30,6 +33,11 @@ const UNKNOWN: OpenStatus = { state: 'unknown', text: '' };
 /** 한국 시간 기준 요일(0=일). 요일 이름을 붙이는 쪽도 같은 기준을 써야 한다. */
 export function seoulDay(now: Date = new Date()): number {
   return seoul(now).getDay();
+}
+
+/** 한국 시간 기준 시(0~23). */
+export function seoulHour(now: Date = new Date()): number {
+  return seoul(now).getHours();
 }
 
 /** 어느 시간대에서 보든 한국 시각으로 읽도록 옮긴 Date. 값 읽기 전용이다. */
@@ -84,6 +92,17 @@ export function openStatus(hours: string[] | undefined, now = new Date(), hoursD
 
   const end = t.overnight ? t.end + 24 * 60 : t.end;
   if (nowMin >= end) return { state: 'closed', text: '영업 종료' };
+
+  // 쉬는 시간이 마감에 닿거나 넘으면(「11:00 ~ 15:00 (브레이크 14:30 ~ 16:00)」) 다시 열지 않는다 — 그날 영업 끝.
+  const resting = t.breaks.find((b) => nowMin >= b.start && nowMin < b.end);
+  if (resting) {
+    return resting.end >= end
+      ? { state: 'closed', text: '영업 종료' }
+      : { state: 'break', text: `브레이크타임 · ${fmt(resting.end)}에 다시 엽니다` };
+  }
+  const soon = t.breaks.find((b) => b.start > nowMin && b.start - nowMin <= 60 && b.start < end);
+  if (soon) return { state: 'closing-soon', text: `곧 브레이크타임 · ${fmt(soon.start)}부터` };
+
   return { state: end - nowMin <= 60 ? 'closing-soon' : 'open', text: statusText(nowMin, t.end) };
 }
 
@@ -99,8 +118,13 @@ function fmt(min: number): string {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 }
 
-function parseRange(s: string): { start: number; end: number; overnight: boolean } | null {
-  const m = s.match(/(\d{1,2}:\d{2})\s*~\s*(\d{1,2}:\d{2})/);
+const RANGE = /(\d{1,2}:\d{2})\s*~\s*(\d{1,2}:\d{2})/g;
+
+function parseRange(s: string): {
+  start: number; end: number; overnight: boolean; breaks: { start: number; end: number }[];
+} | null {
+  const { span, breaks } = splitBreak(s);
+  const m = [...span.matchAll(RANGE)][0];
   if (!m) return null;
   const start = toMinutes(m[1]);
   let end = toMinutes(m[2]);
@@ -108,7 +132,17 @@ function parseRange(s: string): { start: number; end: number; overnight: boolean
   // "14:00 ~ 24:00" 은 그날 자정. "18:00 ~ 02:00" 은 다음 날 새벽.
   if (end === 24 * 60) end = 24 * 60 - 1;
   const overnight = end < start;
-  return { start, end, overnight };
+  // 자정을 넘기는 쉬는 시간은 실데이터에 없다. 앞뒤가 뒤집힌 것은 버린다.
+  const rests = [...(breaks ?? '').matchAll(RANGE)]
+    .map((b) => ({ start: toMinutes(b[1]), end: toMinutes(b[2]) }))
+    .filter((b): b is { start: number; end: number } => b.start != null && b.end != null && b.start < b.end);
+  return { start, end, overnight, breaks: rests };
+}
+
+/** "07:00 ~ 19:00 (브레이크 14:00 ~ 15:00)" → 영업 범위와 쉬는 시간 글자를 나눈다. 화면 표시용. */
+export function splitBreak(s: string): { span: string; breaks: string | null } {
+  const m = s.match(/^(.*?)\s*\(브레이크\s*([^)]*)\)\s*$/);
+  return m ? { span: m[1], breaks: m[2] } : { span: s, breaks: null };
 }
 
 /** 목록 필터용. "영업 중" 칩이 켜졌을 때 남길 것인지. */

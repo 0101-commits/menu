@@ -89,6 +89,19 @@ export interface Ratings {
 /** 키는 Place.placeId (네이버 sid) */
 export type RatingsMap = Record<string, Ratings>;
 
+/**
+ * 상세를 열 때만 받는 것(public/data/details.json). 카카오 장소 응답에서 온다.
+ * 목록·지도에는 안 쓰므로 첫 화면이 받는 ratings.json 에서 떼어 냈다.
+ */
+export interface PlaceDetails {
+  /** 카카오 AI 장소 요약(kanana). 제목 한 줄 + 짧은 근거 최대 3개. */
+  ai?: { title: string; points: string[] };
+  /** 시간대별 방문, 일주일 평균. from = 첫 시각(0~23), v = 가장 붐비는 때 대비 0~100. */
+  busy?: { from: number; v: number[] };
+}
+
+export type DetailsMap = Record<string, PlaceDetails>;
+
 /** 지도에 얹는 미저장 가게. 발견 모드에서 카카오 SDK 가 준다. */
 export interface Discovered {
   kakaoId: string;

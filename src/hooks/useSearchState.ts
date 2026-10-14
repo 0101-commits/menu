@@ -68,8 +68,10 @@ export function useSearchState({
 
   const index = useMemo(() => buildIndex(places), [places]);
 
-  const runSearch = useCallback(async () => {
-    const parsed = parseQuery(query);
+  // input 을 주면 그 글로 검색한다(공유로 받은 가게 이름 등). 검색칸에도 같이 넣는다.
+  const runSearch = useCallback(async (input?: string) => {
+    if (input != null) setQuery(input);
+    const parsed = parseQuery(input ?? query);
     if (parsed.categories.length) setCategories((prev) => [...new Set([...prev, ...parsed.categories])]);
     setSearchNotice(null);
     const text = parsed.text.trim();

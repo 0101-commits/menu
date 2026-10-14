@@ -23,6 +23,9 @@ function publishedAt() {
 
 const IN = 'public/data/ratings.json';
 const OUT = 'raw/ratings.json';
+// AI 요약·시간대별 방문은 카카오 값인데 따로 내보낸다(build-ratings.mjs). 되살릴 때 카카오 칸에 다시 합친다.
+// 안 합치면 raw/ 캐시가 빈 실행마다 details.json 이 통째로 비고, 축소 게이트에 걸린다.
+const details = readJson('public/data/details.json', {});
 
 const published = readJson(IN, null);
 if (!published) {
@@ -36,14 +39,22 @@ let restored = 0;
 const at = publishedAt();
 for (const [sid, entry] of Object.entries(published)) {
   // 이번 실행에서 이미 새로 받은 건 덮지 않는다.
-  if (store[sid]) continue;
+  // 다만 지난 실행의 캐시(enrich 의 raw/)는 요약·방문을 모으기 전 것일 수 있다. 그 칸이 비어 있으면
+  // 공개본에서 채운다 — 안 채우면 30일 안 된 항목은 다시 받지 않아 details.json 에서 조용히 빠진다.
+  // (영업시간처럼 파서를 고친 값은 이걸로 안 되고 --force 로 다시 받아야 한다.)
+  const cached = store[sid];
+  if (cached) {
+    if (cached.kakao && details[sid] && !cached.kakao.ai && !cached.kakao.busy) Object.assign(cached.kakao, details[sid]);
+    continue;
+  }
+  const kakao = entry.kakao ? { ...entry.kakao, ...details[sid] } : undefined;
   store[sid] = at
     ? {
         ...entry,
         ...(entry.naver ? { naver: { ...entry.naver, at } } : {}),
-        ...(entry.kakao ? { kakao: { ...entry.kakao, at } } : {}),
+        ...(kakao ? { kakao: { ...kakao, at } } : {}),
       }
-    : entry;
+    : { ...entry, ...(kakao ? { kakao } : {}) };
   restored++;
 }
 

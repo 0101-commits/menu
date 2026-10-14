@@ -127,6 +127,38 @@ it('영업시간이 없으면 모른다고 한다', () => {
   assert.equal(isOpenNow(undefined, at(15)), false);
 });
 
+it('쉬는 시간 안이면 영업 중이 아니다', () => {
+  // 10-14 실측: 백나예김밥 14:23 에 맛핀은 「영업 중」, 카카오는 「브레이크타임 · 15:00 오픈」.
+  const hours = ['07:00 ~ 19:00 (브레이크 14:00 ~ 15:00)', '', '', '', '', '', ''];
+  const s = openStatus(hours, at(14, 23));
+  assert.equal(s.state, 'break');
+  assert.equal(s.text, '브레이크타임 · 15:00에 다시 엽니다');
+  assert.equal(isOpenNow(hours, at(14, 23)), false);
+});
+
+it('쉬는 시간 경계: 시작 시각은 쉼, 끝 시각은 영업, 한 시간 전은 곧 쉼', () => {
+  const hours = ['07:00 ~ 19:00 (브레이크 14:00 ~ 15:00)', '', '', '', '', '', ''];
+  assert.equal(openStatus(hours, at(14)).state, 'break');
+  assert.equal(openStatus(hours, at(15)).state, 'open');
+  assert.equal(openStatus(hours, at(13, 30)).text, '곧 브레이크타임 · 14:00부터');
+  assert.equal(isOpenNow(hours, at(13, 30)), true); // 아직은 열려 있다
+  assert.equal(openStatus(hours, at(12)).state, 'open');
+});
+
+it('네이버 꼴 쉬는 시간과 자정 넘김 영업을 같이 읽는다', () => {
+  const hours = ['11:30~02:00 (브레이크 15:00~17:00)', '', '', '', '', '', ''];
+  assert.equal(openStatus(hours, at(16)).state, 'break');
+  assert.equal(openStatus(hours, at(23)).state, 'open');
+  assert.equal(isOpenNow(hours, at(1)), true); // 새벽 1시는 어젯밤 영업의 연장
+});
+
+it('쉬는 시간이 마감에 닿거나 넘으면 다시 연다고 하지 않는다', () => {
+  const hours = ['11:00 ~ 15:00 (브레이크 14:30 ~ 16:00)', '', '', '', '', '', ''];
+  assert.equal(openStatus(hours, at(14, 45)).text, '영업 종료');
+  const late = ['17:00 ~ 24:00 (브레이크 23:00 ~ 24:00)', '', '', '', '', '', ''];
+  assert.equal(openStatus(late, at(23, 30)).state, 'closed');
+});
+
 // ---------- 통합 평점 ----------
 const means = { naver: 4.3, kakao: 3.9, google: 4.2 };
 
@@ -440,6 +472,35 @@ it('카카오: 점수·가격·영업시간·랭킹을 집는다', () => {
   assert.deepEqual(r.menus, [{ name: '대광어회', price: 55000 }]);
   assert.equal(r.rank.n, 5);
   assert.equal(r.closed, undefined);
+});
+
+it('카카오: 휴무일로 쪼개진 영업시간 묶음을 전부 읽고 쉬는 시간을 붙인다', () => {
+  // 실응답(2026-10-14) 모양: 수~토 / 일 휴무 / 월~화 세 묶음. 첫 묶음만 읽으면 4일에서 끊긴다.
+  const on = { start_end_time_desc: '07:00 ~ 19:00', break_times_desc: ['14:00 ~ 15:00 브레이크타임'] };
+  const r = parseKakao({
+    open_hours: { week_from_today: { week_periods: [
+      { days: [{ on_days: on }, { on_days: on }, { on_days: on }, { on_days: on }] },
+      { days: [{ off_days_desc: '휴무일' }] },
+      { days: [{ on_days: on }, { on_days: { start_end_time_desc: '07:00 ~ 19:00' } }] },
+    ] } },
+  });
+  assert.equal(r.hours.length, 7);
+  assert.equal(r.hours[0], '07:00 ~ 19:00 (브레이크 14:00 ~ 15:00)');
+  assert.equal(r.hours[4], '');
+  assert.equal(r.hours[6], '07:00 ~ 19:00');
+});
+
+it('카카오: AI 요약과 시간대별 방문을 줄여 담는다', () => {
+  const uv = Array(24).fill(-1);
+  uv.splice(11, 6, 200, 400, 100, -1, 50, 300); // 11~16시, 14시는 쉬는 시간
+  const r = parseKakao({
+    ai_mate: { summary: { title: '속 꽉 찬 김밥', contents: ['김밥 추천', '채식 메뉴', '단체석', '테라스'] } },
+    visitor: { weekly_uv_average: uv },
+  });
+  assert.deepEqual(r.ai, { title: '속 꽉 찬 김밥', points: ['김밥 추천', '채식 메뉴', '단체석'] });
+  assert.deepEqual(r.busy, { from: 11, v: [50, 100, 25, 0, 13, 75] });
+  // 자료가 하나도 없으면(전부 -1) 담지 않는다.
+  assert.equal(parseKakao({ visitor: { weekly_uv_average: Array(24).fill(-1) } }).busy, undefined);
 });
 
 it('카카오: 영업상태가 Y 가 아니면 폐업 표시', () => {

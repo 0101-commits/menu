@@ -104,6 +104,7 @@ jobs:
             public/data/places.json
             public/data/ratings.json
             public/data/meta.json
+            public/data/details.json
           delete-branch: true
 
       - name: 실패 알림 이슈
