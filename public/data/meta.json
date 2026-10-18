@@ -1,17 +1,17 @@
 {
   "version": 1,
-  "generatedAt": "2026-10-14T11:18:07.916Z",
+  "generatedAt": "2026-10-18T23:39:30.268Z",
   "places": {
-    "total": 4084,
-    "withKakaoId": 3883,
-    "withGoogleId": 3613
+    "total": 4085,
+    "withKakaoId": 3869,
+    "withGoogleId": 3576
   },
   "ratings": {
-    "total": 4066,
-    "withNaver": 4060,
-    "withKakao": 3872,
+    "total": 4054,
+    "withNaver": 4049,
+    "withKakao": 3861,
     "withGoogle": 0,
-    "withHours": 3799,
-    "withMenus": 3771
+    "withHours": 3837,
+    "withMenus": 3826
   }
 }
