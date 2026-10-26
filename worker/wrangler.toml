@@ -60,3 +60,17 @@ DAILY_KAKAO_LIMIT = "500"
 [[kv_namespaces]]
 binding = "RATINGS"
 id = "d4619543152c40e8b9107f85abc83712"
+
+# IP 마다 분당 상한(index.js overRate). Origin 헤더는 꾸밀 수 있어 그것만으로는 하루 몫을 못 지킨다.
+#   MISS_LIMIT: 캐시에 없어 네이버·카카오·구글을 부르는 요청 — 사람이 가게를 하나씩 여는 속도면 넉넉하다
+#   IDS_LIMIT : /google 묶음 조회(KV 읽기만) — 구글 평점순 정렬 한 번이 60개씩 약 70번이라 그보다 크게
+# namespace_id 는 계정 안에서 겹치면 안 된다(economic-site 가 1001·1002).
+[[ratelimits]]
+name = "MISS_LIMIT"
+namespace_id = "2001"
+simple = { limit = 30, period = 60 }
+
+[[ratelimits]]
+name = "IDS_LIMIT"
+namespace_id = "2002"
+simple = { limit = 100, period = 60 }

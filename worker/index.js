@@ -29,6 +29,22 @@ const BUILT_AT = '2026-09-21';
 const IDS_MAX = 60; // 한 요청에 물을 수 있는 구글 place ID 수
 const KV_CONCURRENCY = 20; // 동시에 여는 KV 읽기 수
 const ID_RE = /^[A-Za-z0-9_-]{1,128}$/;
+// 네이버·카카오 place ID 는 숫자뿐이다. 아무 글자나 받으면 없는 ID 로 바깥 호출 몫만 태운다.
+const NUM_ID_RE = /^\d{1,20}$/;
+
+/**
+ * IP 마다 분당 상한(Workers Rate Limiting 바인딩, 데이터센터별 셈).
+ * Origin 헤더는 curl 로 얼마든지 꾸밀 수 있어서, 그것만으로는 하루 몫(네이버·카카오 500 · 구글 33)을
+ * 한 사람이 다 태우는 걸 못 막는다. 바인딩이 없는 환경(로컬)에서는 그냥 통과.
+ * ⚠ 2026-10-26 실측: 한국에서 1분에 200번 보내도 429 0 — 셈이 느슨하게 맞춰져 느린 반복은 못 잡는다.
+ *   큰 폭주를 늦추는 완충일 뿐, 진짜 상한은 overQuota 의 하루 몫과 구글 콘솔 할당량이다.
+ */
+async function overRate(limiter, request) {
+  if (!limiter) return false;
+  const ip = request.headers.get('CF-Connecting-IP') ?? 'unknown';
+  const { success } = await limiter.limit({ key: ip }).catch(() => ({ success: true }));
+  return !success;
+}
 
 function corsHeaders(origin, allowed) {
   // 비어 있으면 막는다. 열어 두면 vars 설정을 빠뜨린 배포에서 아무 사이트나
@@ -221,7 +237,10 @@ export default {
 
     const url = new URL(request.url);
 
-    if (url.pathname === '/google') return googleByIds(env, url, cors, ctx);
+    if (url.pathname === '/google') {
+      if (await overRate(env.IDS_LIMIT, request)) return json({ error: 'rate' }, 429, cors);
+      return googleByIds(env, url, cors, ctx);
+    }
 
     if (url.pathname === '/health') {
       return json(
@@ -244,7 +263,7 @@ export default {
     };
     // ID 는 숫자·영문·하이픈·밑줄만. 그 밖의 값으로 외부 주소를 만들지 않는다.
     for (const [key, v] of Object.entries(q)) {
-      if (v && !ID_RE.test(v)) return json({ error: `bad ${key}` }, 400, cors);
+      if (v && !(key === 'g' ? ID_RE : NUM_ID_RE).test(v)) return json({ error: `bad ${key}` }, 400, cors);
     }
     if (!q.n && !q.k && !q.g) return json({ error: 'empty' }, 400, cors);
 
@@ -264,6 +283,8 @@ export default {
       if (body) return json(body, 200, { ...cors, 'x-cache': 'edge', 'cache-control': 'public, max-age=3600' });
     }
 
+    // 캐시에 없을 때만 바깥을 부른다 — 상한도 여기서만 센다(캐시 적중은 몫을 안 쓴다).
+    if (await overRate(env.MISS_LIMIT, request)) return json({ error: 'rate' }, 429, cors);
     const out = await collect(env, q);
 
     // 요청한 소스가 전부 채워졌을 때만 30 일을 준다.
