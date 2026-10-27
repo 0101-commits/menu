@@ -41,7 +41,7 @@ compatibility_date = "2026-09-01"
 
 [vars]
 # 이 주소에서 온 요청만 받는다. 비워 두면 전부 403 이다(열리지 않는다).
-ALLOWED_ORIGINS = "https://0101-commits.github.io,http://localhost:5173"
+ALLOWED_ORIGINS = "https://matpin.pages.dev,https://0101-commits.github.io,http://localhost:5173"
 
 # 구글 하루 상한. **온디맨드와 롤링 갱신이 이 한 개를 나눠 쓴다.**
 # 33 × 30일 = 990 으로 무료 한도(월 1,000) 안이다.

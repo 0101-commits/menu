@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { Database, Download, Upload, X, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { Database, Download, Upload, X, CheckCircle2, AlertTriangle, Smartphone } from 'lucide-react';
+import { promptInstall, useInstallState } from '../lib/install';
 import type { MetaState } from '../lib/meta';
 import { coverage, formatMetaDate } from '../lib/meta';
 import type { ImportSummary } from '../lib/visits';
@@ -25,6 +26,52 @@ function readTextFile(file: File): Promise<string> {
 
 
 type Notice = { kind: 'ok' | 'error'; text: string } | null;
+
+const IS_IOS = typeof navigator !== 'undefined' && /iPhone|iPad|iPod/.test(navigator.userAgent);
+
+function InstallSection() {
+  const state = useInstallState();
+  const [declined, setDeclined] = useState(false);
+
+  return (
+    <section className="pt-4 border-t border-line-subtle" aria-labelledby="install-title">
+      <h3 id="install-title" className="m-0 flex items-center gap-1.5 text-sm font-bold">
+        <Smartphone className="w-4 h-4" aria-hidden="true" />앱으로 설치
+      </h3>
+      {state === 'standalone' && <p className="m-0 mt-1 text-xs text-fg-muted">지금 설치한 앱으로 열려 있습니다.</p>}
+      {state === 'installed' && <p className="m-0 mt-1 text-xs text-fg-muted" role="status">설치했습니다. 홈 화면의 맛핀 아이콘으로 여세요.</p>}
+      {state === 'ready' && (
+        <>
+          <p className="m-0 mt-1 text-xs text-fg-muted">홈 화면에 아이콘이 생기고 주소창 없이 앱처럼 열립니다.</p>
+          <button
+            type="button"
+            onClick={() => { void promptInstall().then((outcome) => setDeclined(outcome === 'dismissed')); }}
+            className="mt-3 w-full inline-flex items-center justify-center gap-1.5 min-h-11 px-3 rounded-lg bg-primary text-on-primary text-sm font-semibold hover:bg-primary-pressed focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+          >
+            <Download className="w-4 h-4" aria-hidden="true" />홈 화면에 설치
+          </button>
+        </>
+      )}
+      {state === 'unavailable' && (
+        <p className="m-0 mt-1 text-xs text-fg-muted">
+          {IS_IOS
+            ? '사파리 아래쪽 공유 버튼 › 홈 화면에 추가를 누르세요.'
+            : declined
+              ? '설치를 취소했습니다. 페이지를 새로 고치면 다시 설치할 수 있습니다.'
+              : '이 브라우저가 아직 설치를 허락하지 않았습니다. 화면을 한 번 누르고 몇 초 뒤 다시 열어 보세요. 그래도 안 되면 원인을 점검합니다.'}
+        </p>
+      )}
+      {state === 'unavailable' && !IS_IOS && (
+        <a
+          href={`${import.meta.env.BASE_URL}install.html`}
+          className="mt-3 inline-flex items-center justify-center gap-1.5 min-h-11 px-3 rounded-lg bg-surface border border-line text-sm font-semibold hover:bg-surface-pressed focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+        >
+          설치 점검하기
+        </a>
+      )}
+    </section>
+  );
+}
 
 export function DataPanel({ open, onClose, meta, visitCount, onExport, onImport }: Props) {
   const closeRef = useRef<HTMLButtonElement>(null);
@@ -172,6 +219,8 @@ export function DataPanel({ open, onClose, meta, visitCount, onExport, onImport 
               </p>
             )}
           </section>
+
+          <InstallSection />
         </div>
       </section>
     </div>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mergeVisits, parseVisitsJson, serializeVisits, validateVisits, type Visits } from './visits';
+import { importCarried, mergeVisits, parseVisitsJson, serializeVisits, validateVisits, VISITS_KEY, type Visits } from './visits';
 
 const oldVisit = { at: '2026-09-01T00:00:00.000Z', note: '기존 메모' };
 const newVisit = { at: '2026-09-20T00:00:00.000Z' };
@@ -48,5 +48,36 @@ describe('mergeVisits', () => {
     const second = mergeVisits(first.visits, { a: newVisit });
     expect(second.visits).toEqual(first.visits);
     expect(second.summary).toEqual({ imported: 0, updated: 0, kept: 1, total: 1 });
+  });
+});
+
+describe('옛 주소에서 넘어온 기록', () => {
+  const carry = (payload: unknown) => {
+    window.history.replaceState(null, '', `/?p=1#carry=${encodeURIComponent(JSON.stringify(payload))}`);
+  };
+
+  it('방문기록을 합치고 화면 설정을 옮긴 뒤 주소창에서 지운다', () => {
+    localStorage.setItem(VISITS_KEY, JSON.stringify({ a: oldVisit }));
+    carry({ v: { a: newVisit, b: oldVisit }, s: 'dark' });
+    const summary = importCarried();
+    expect(summary).toMatchObject({ imported: 1, updated: 1 });
+    expect(JSON.parse(localStorage.getItem(VISITS_KEY)!)).toMatchObject({ a: newVisit, b: oldVisit });
+    expect(localStorage.getItem('matpin-color-scheme')).toBe('dark');
+    expect(window.location.hash).toBe('');
+    expect(window.location.search).toBe('?p=1');
+  });
+
+  it('손상된 값은 무시하고 기존 기록을 지키며 주소창만 정리한다', () => {
+    localStorage.setItem(VISITS_KEY, JSON.stringify({ a: oldVisit }));
+    window.history.replaceState(null, '', '/#carry=%7Bbroken');
+    expect(importCarried()).toBeNull();
+    expect(JSON.parse(localStorage.getItem(VISITS_KEY)!)).toEqual({ a: oldVisit });
+    expect(window.location.hash).toBe('');
+  });
+
+  it('#carry= 가 없으면 아무것도 하지 않는다', () => {
+    window.history.replaceState(null, '', '/#other');
+    expect(importCarried()).toBeNull();
+    expect(window.location.hash).toBe('#other');
   });
 });

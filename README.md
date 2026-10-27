@@ -14,7 +14,7 @@
 
 ```bash
 npm install
-npm run dev        # http://localhost:5173/menu/
+npm run dev        # http://localhost:5173/
 ```
 
 ```bash
@@ -93,10 +93,15 @@ node scripts/build-places.mjs --from-existing   # 새 수집 없이 필드만 �
 
 ## 배포
 
-`main` 에 올라가면 [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) 이
-GitHub Pages 로 내보낸다. 주소는 `https://0101-commits.github.io/menu/`.
+주소는 **`https://matpin.pages.dev/`** (Cloudflare Pages). `main` 에 올라가면
+[`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) 이 두 곳으로 내보낸다.
 
-하위 경로 배포라 `vite.config.ts` 의 `base` 가 `/menu/` 다. 다른 곳에 올릴 때는 `VITE_BASE` 로 덮는다.
+- 새 주소: Cloudflare Pages 프로젝트 `matpin`. 레포 Secrets `CLOUDFLARE_API_TOKEN`·`CLOUDFLARE_ACCOUNT_ID` 가 있어야 자동으로 올라간다.
+  토큰이 없으면 로컬에서 `npm run build && npx wrangler pages deploy dist --project-name matpin --branch main`.
+- 옛 주소: GitHub Pages `https://0101-commits.github.io/menu/` (`VITE_BASE=/menu/` 로 빌드).
+
+카카오 지도는 콘솔에 등록한 도메인에서만 뜬다. 새 주소를 바꾸면 `/setup.html` 로 먼저 확인한다.
+설치가 안 되는 기기는 `/install.html` 이 원인을 보여 준다.
 
 ### 온디맨드 평점 Worker
 
@@ -112,7 +117,7 @@ GitHub Pages 로 내보낸다. 주소는 `https://0101-commits.github.io/menu/`.
 
 ```bash
 cd worker && npx wrangler deploy
-curl -H "Origin: https://0101-commits.github.io" https://<배포주소>/health
+curl -H "Origin: https://matpin.pages.dev" https://<배포주소>/health
 ```
 
 `/health` 의 `builtAt` 이 `worker/index.js` 의 `BUILT_AT` 과 다르면 옛 배포본이 떠 있는 것이다

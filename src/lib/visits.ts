@@ -118,6 +118,33 @@ function write(visits: Visits): boolean {
   }
 }
 
+/**
+ * 옛 주소(0101-commits.github.io/menu)가 새 주소로 넘길 때 방문기록·화면 설정을 주소 뒤 #carry= 에 실어 보낸다.
+ * localStorage 는 주소마다 따로라서 이렇게 들고 오지 않으면 기록이 옛 주소에 남는다. # 뒤는 서버로 가지 않는다.
+ * 받은 기록은 지금 기록과 합치고(더 최신 방문 우선) 주소창에서 지운다. 화면을 그리기 전에 한 번 부른다.
+ */
+export function importCarried(): ImportSummary | null {
+  if (typeof window === 'undefined' || !location.hash.startsWith('#carry=')) return null;
+  let summary: ImportSummary | null = null;
+  try {
+    const payload: unknown = JSON.parse(decodeURIComponent(location.hash.slice('#carry='.length)));
+    if (isRecord(payload)) {
+      if (payload.v !== undefined) {
+        const merged = mergeVisits(read(), validateVisits(payload.v));
+        if (write(merged.visits)) summary = merged.summary;
+      }
+      if (payload.s === 'dark' || payload.s === 'light') {
+        localStorage.setItem('matpin-color-scheme', payload.s);
+        document.documentElement.setAttribute('data-seed-user-color-scheme', payload.s);
+      }
+    }
+  } catch {
+    // 잘린 주소·손상 데이터 — 새 주소는 그대로 쓸 수 있게 조용히 넘어간다
+  }
+  history.replaceState(history.state, '', location.pathname + location.search);
+  return summary;
+}
+
 export function useVisits() {
   const [visits, setVisits] = useState<Visits>(read);
 

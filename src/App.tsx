@@ -3,7 +3,7 @@
 // 여기서는 지도/목록/상세가 같은 상태를 보도록 연결한다.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Database, Loader2, MapPin, Moon, Shuffle, Sun, ChevronUp } from 'lucide-react';
+import { Database, Download, Loader2, MapPin, Moon, Shuffle, Sun, ChevronUp } from 'lucide-react';
 import { MapView } from './components/MapView';
 import { PlaceList } from './components/PlaceList';
 import { PlaceSheet } from './components/PlaceSheet';
@@ -17,6 +17,7 @@ import { readUrl } from './lib/url-state';
 import type { Place } from './types';
 import { matchShared, readShare } from './lib/share';
 import { useVisits } from './lib/visits';
+import { promptInstall, useInstallState } from './lib/install';
 import { useAppData } from './hooks/useAppData';
 import { useDiscovery } from './hooks/useDiscovery';
 import { useLayoutState } from './hooks/useLayoutState';
@@ -27,6 +28,7 @@ import { useUrlSync } from './hooks/useUrlSync';
 export default function App() {
   const initial = useRef(readUrl()).current;
   const layout = useLayoutState();
+  const installState = useInstallState();
   const { visits, toggle: toggleVisit, setNote, exportJson, importJson } = useVisits();
   const visitedIds = useMemo(() => new Set(Object.keys(visits)), [visits]);
   const [dataPanelOpen, setDataPanelOpen] = useState(false);
@@ -218,6 +220,17 @@ export default function App() {
               </span>
             </div>
             <div className="flex items-center gap-0.5 shrink-0">
+              {installState === 'ready' && (
+                <button
+                  type="button"
+                  data-nodrag
+                  onClick={() => { void promptInstall(); }}
+                  aria-label="맛핀을 앱으로 설치"
+                  className="inline-flex items-center gap-1 h-8 px-2.5 mr-1 rounded-full bg-primary text-on-primary text-xs font-semibold hover:bg-primary-pressed focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary transition-colors"
+                >
+                  <Download className="w-3.5 h-3.5" aria-hidden="true" />설치
+                </button>
+              )}
               <button
                 type="button"
                 data-nodrag

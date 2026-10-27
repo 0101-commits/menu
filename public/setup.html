@@ -156,10 +156,10 @@
 
     <li>
       <p class="step-title">왼쪽 메뉴에서 <span class="path">앱 설정 › 플랫폼</span> → Web 의 <span class="path">사이트 도메인 등록</span></p>
-      <p class="step-body">아래 두 줄을 등록합니다. 위는 배포 주소, 아래는 개발용입니다. 경로(<span class="path">/menu</span>)는 빼고 주소만 넣습니다.</p>
+      <p class="step-body">아래 두 줄을 등록합니다. 위는 배포 주소, 아래는 개발용입니다. 끝의 <span class="path">/</span> 는 빼고 주소만 넣습니다.</p>
 
       <div class="copy">
-        <code id="domDeploy">https://0101-commits.github.io</code>
+        <code id="domDeploy">https://matpin.pages.dev</code>
         <button class="btn" type="button" data-copy="domDeploy">복사</button>
       </div>
       <div class="copy">
@@ -192,8 +192,8 @@
       <li><strong>다른 앱에 등록했다.</strong> 가장 흔합니다. 1단계의 JavaScript 키와 같은 앱인지 대조하세요.</li>
       <li><strong>Web 이 아닌 곳에 넣었다.</strong> 플랫폼 화면에는 Android · iOS · Web 이 따로 있습니다. Web 의 “사이트 도메인”이어야 합니다.</li>
       <li><strong>저장을 안 눌렀다.</strong> 입력만 하고 나가면 반영되지 않습니다. 목록에 실제로 줄이 보여야 합니다.</li>
-      <li><strong>경로까지 넣었다.</strong> <span class="path">https://0101-commits.github.io/menu</span> 가 아니라
-          <span class="path">https://0101-commits.github.io</span> 입니다. 끝에 <span class="path">/</span> 도 빼세요.</li>
+      <li><strong>경로까지 넣었다.</strong> <span class="path">https://matpin.pages.dev/</span> 가 아니라
+          <span class="path">https://matpin.pages.dev</span> 입니다. 끝에 <span class="path">/</span> 도 빼세요.</li>
       <li><strong>http 와 https 를 헷갈렸다.</strong> 배포 주소는 <strong>https</strong>, 로컬은 <strong>http</strong> 입니다.</li>
       <li><strong>반영이 덜 됐다.</strong> 1~2분 걸릴 수 있습니다. 이 페이지가 자동으로 다시 확인합니다.</li>
     </ol>
@@ -238,7 +238,7 @@
   var recheckBtn = document.getElementById('recheck');
 
   originEl.textContent = location.origin;
-  document.getElementById('domDeploy').textContent = 'https://0101-commits.github.io';
+  document.getElementById('domDeploy').textContent = 'https://matpin.pages.dev';
 
   function setState(kind, title, detail) {
     statusEl.className = 'status is-' + kind;

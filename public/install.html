@@ -1,0 +1,364 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#c8362a">
+<title>맛핀 · 앱 설치 점검</title>
+<!-- 앱과 같은 매니페스트를 건다. 그래야 이 페이지에서도 브라우저가 설치 판정을 하고
+     beforeinstallprompt 를 보낸다. 설치되는 앱은 매니페스트의 start_url(맛핀 첫 화면)이다. -->
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" type="image/svg+xml" href="./icon.svg">
+<style>
+  :root {
+    --bg: #f4f5f7; --card: #ffffff; --sunken: #eceef1;
+    --ink: #1b1d21; --muted: #5b6068; --subtle: #8a8f97;
+    --line: #dcdfe4;
+    --accent: #c8362a; --accent-ink: #8c2019;
+    --ok: #1f7a4d; --ok-weak: #dff3e7;
+    --bad: #b42318; --bad-weak: #fde2e0;
+    --wait: #9a6700; --wait-weak: #fff3c4;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #15171b; --card: #1e2126; --sunken: #181a1e;
+      --ink: #ecedef; --muted: #a0a6ae; --subtle: #737a83;
+      --line: #2e323a;
+      --accent: #ff8a72; --accent-ink: #ffb3a3;
+      --ok: #5fcf8f; --ok-weak: #17301f;
+      --bad: #ff7b6e; --bad-weak: #3d1a17;
+      --wait: #f2c14e; --wait-weak: #3a2f10;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
+    line-height: 1.6; font-size: 15px;
+  }
+  main { max-width: 640px; margin: 0 auto; padding: 24px 16px 64px; }
+  header { display: flex; align-items: center; gap: 12px; margin: 0 0 6px; }
+  header img { width: 44px; height: 44px; border-radius: 11px; }
+  h1 { font-size: 21px; letter-spacing: -0.02em; margin: 0; }
+  .lede { color: var(--muted); margin: 0 0 20px; font-size: 14px; }
+
+  .verdict { border-radius: 14px; padding: 16px; margin: 0 0 16px; }
+  .verdict.is-ok { background: var(--ok-weak); }
+  .verdict.is-bad { background: var(--bad-weak); }
+  .verdict.is-wait { background: var(--wait-weak); }
+  .verdict strong { display: block; font-size: 16.5px; }
+  .verdict p { margin: 6px 0 0; font-size: 14px; color: var(--ink); }
+
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    min-height: 46px; padding: 0 16px; border-radius: 10px; border: 1px solid var(--line);
+    background: var(--card); color: var(--ink); font: inherit; font-size: 14.5px; font-weight: 650;
+    cursor: pointer; text-decoration: none;
+  }
+  .btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  @media (prefers-color-scheme: dark) { .btn-primary { color: #2a1410; } }
+  .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .btn[hidden] { display: none; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 22px; }
+  .row .btn { flex: 1 1 160px; }
+
+  ul.checks { list-style: none; margin: 0 0 22px; padding: 0; background: var(--card);
+              border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+  ul.checks li { display: grid; grid-template-columns: 22px 1fr; gap: 10px; padding: 12px 14px;
+                 border-top: 1px solid var(--line); }
+  ul.checks li:first-child { border-top: 0; }
+  .mark { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center;
+          font-size: 13px; font-weight: 800; color: #fff; background: var(--subtle); margin-top: 1px; }
+  .ok .mark { background: var(--ok); }
+  .bad .mark { background: var(--bad); }
+  .wait .mark { background: var(--wait); }
+  .checks b { display: block; font-size: 14.5px; }
+  .checks span.d { display: block; font-size: 13px; color: var(--muted); word-break: break-word; }
+
+  h2 { font-size: 15px; margin: 26px 0 8px; }
+  ol.how { margin: 0; padding-left: 20px; font-size: 14px; color: var(--muted); }
+  ol.how li { margin: 0 0 6px; }
+  textarea { width: 100%; min-height: 150px; font: 12px/1.5 ui-monospace, Consolas, monospace; color: var(--ink);
+             background: var(--sunken); border: 1px solid var(--line); border-radius: 10px; padding: 10px; }
+  .small { font-size: 12.5px; color: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <img src="./pwa-192.png" alt="" width="44" height="44">
+    <h1>맛핀 앱 설치 점검</h1>
+  </header>
+  <p class="lede">이 휴대폰의 브라우저가 맛핀을 앱으로 설치할 수 있는지 직접 확인합니다. 결과는 몇 초 안에 채워집니다.</p>
+
+  <section class="verdict is-wait" id="verdict" aria-live="polite">
+    <strong id="verdictTitle">확인하는 중…</strong>
+    <p id="verdictBody">브라우저의 설치 신호를 기다립니다. 화면을 한 번 눌러 주세요.</p>
+  </section>
+
+  <div class="row">
+    <button class="btn btn-primary" id="install" type="button" hidden>지금 설치</button>
+    <a class="btn" href="./">맛핀 열기</a>
+  </div>
+
+  <ul class="checks" id="checks"></ul>
+
+  <div class="row">
+    <button class="btn" id="reset" type="button">저장된 앱 파일 비우고 다시 받기</button>
+  </div>
+  <p class="small" style="margin-top:-14px">
+    예전에 받아 둔 맛핀 파일(서비스워커·캐시)을 지우고 새로 받습니다. 방문기록·화면 설정은 지우지 않습니다.
+  </p>
+
+  <h2>그래도 설치 메뉴가 안 보이면</h2>
+  <ol class="how">
+    <li><b>카카오톡에서 연 화면이면</b> 오른쪽 아래 <b>⋮ › 다른 브라우저로 열기</b>로 나가세요. 카톡 안 화면에는 설치 메뉴가 없습니다.</li>
+    <li><b>삼성 인터넷</b>: 주소창 오른쪽의 <b>⤓ 내려받기 모양 아이콘</b>, 또는 아래 <b>≡ › 현재 페이지 추가 › 홈 화면</b>.</li>
+    <li><b>크롬</b>: 오른쪽 위 <b>⋮ › 앱 설치</b>. <b>홈 화면에 추가</b>만 보이면 그것을 눌러도 창에서 <b>설치</b>를 고를 수 있습니다.</li>
+    <li>이미 설치돼 있으면 메뉴에 <b>설치</b> 대신 <b>열기</b>가 나옵니다. 앱 목록에서 맛핀을 찾아 보세요.</li>
+  </ol>
+
+  <h2>점검 결과 보내기</h2>
+  <p class="small">아래 내용을 복사해 개발자에게 보내 주면 원인을 바로 찾을 수 있습니다.</p>
+  <textarea id="report" readonly></textarea>
+  <div class="row" style="margin-top:8px">
+    <button class="btn" id="copy" type="button">결과 복사</button>
+  </div>
+</main>
+
+<script>
+(function () {
+  var checksEl = document.getElementById('checks');
+  var report = [];
+  var results = {};
+  var bip = null;
+  var done = false;            // 설치 창을 띄웠으면 이후 타이머가 결과를 덮어쓰지 않게 한다
+  var started = Date.now();
+  var SCOPE = new URL('./', location.href).href;   // 앱 범위(이 페이지가 있는 폴더)
+
+  function item(key, state, title, detail) {
+    results[key] = state;
+    var li = document.getElementById('c-' + key);
+    if (!li) {
+      li = document.createElement('li');
+      li.id = 'c-' + key;
+      checksEl.appendChild(li);
+    }
+    li.className = state;
+    var sym = state === 'ok' ? '✓' : state === 'bad' ? '!' : '…';
+    li.innerHTML = '<span class="mark" aria-hidden="true"></span><div><b></b><span class="d"></span></div>';
+    li.querySelector('.mark').textContent = sym;
+    li.querySelector('b').textContent = title;
+    li.querySelector('.d').textContent = detail || '';
+    var line = '[' + state + '] ' + key + ': ' + title + (detail ? ' — ' + detail : '');
+    report = report.filter(function (r) { return r.indexOf('] ' + key + ':') < 0; });
+    report.push(line);
+    renderReport();
+  }
+
+  function renderReport() {
+    document.getElementById('report').value =
+      ['맛핀 설치 점검 ' + new Date().toISOString(), navigator.userAgent, location.href].concat(report).join('\n');
+  }
+
+  function verdict(kind, title, body) {
+    var v = document.getElementById('verdict');
+    v.className = 'verdict is-' + kind;
+    document.getElementById('verdictTitle').textContent = title;
+    document.getElementById('verdictBody').textContent = body;
+  }
+
+  // ---- 1. 어디서 열었나 ----
+  var ua = navigator.userAgent;
+  var inApp = /KAKAOTALK|NAVER\(inapp|Instagram|FBAN|FBAV|Line\//i.test(ua);
+  var samsung = (ua.match(/SamsungBrowser\/([\d.]+)/) || [])[1];
+  var chrome = (ua.match(/Chrome\/([\d.]+)/) || [])[1];
+  var isIOS = /iPhone|iPad|iPod/.test(ua);
+  var browser = inApp ? '앱 안 브라우저(카카오톡 등)' : samsung ? '삼성 인터넷 ' + samsung : chrome ? '크롬 계열 ' + chrome : isIOS ? '아이폰 사파리' : '기타';
+  item('browser', inApp ? 'bad' : 'ok', '브라우저: ' + browser,
+    inApp ? '이 화면에서는 설치할 수 없습니다. ⋮ › 다른 브라우저로 열기를 누르세요.' : '');
+
+  var standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+  if (standalone) item('mode', 'ok', '지금 설치한 앱으로 열려 있습니다', '');
+
+  item('https', location.protocol === 'https:' ? 'ok' : 'bad', location.protocol === 'https:' ? '보안 주소(https)' : '보안 주소가 아닙니다', location.origin);
+
+  // ---- 2. 서비스워커 ----
+  function checkWorker() {
+    if (!('serviceWorker' in navigator)) {
+      item('sw', 'bad', '서비스워커를 쓸 수 없는 브라우저', '비밀 모드·사생활 보호 모드면 꺼 주세요.');
+      return Promise.resolve();
+    }
+    return navigator.serviceWorker.getRegistrations().then(function (regs) {
+      var mine = regs.filter(function (r) { return r.scope.indexOf(SCOPE) === 0; });
+      if (!mine.length) {
+        item('sw', 'wait', '서비스워커 등록 전', '맛핀 첫 화면을 한 번 연 뒤 다시 오세요.');
+        return;
+      }
+      var r = mine[0];
+      var w = r.active || r.waiting || r.installing;
+      var state = r.active ? 'ok' : 'wait';
+      item('sw', state, r.active ? '서비스워커 작동 중' : '서비스워커 설치 중',
+        (w ? w.scriptURL.replace(location.origin, '') + ' · ' + w.state : '') + (r.waiting ? ' · 새 판 대기 중' : '') +
+        (navigator.serviceWorker.controller ? ' · 이 화면 관리 중' : ' · 이 화면은 아직 관리 안 함'));
+    }).catch(function (e) { item('sw', 'bad', '서비스워커 확인 실패', String(e)); });
+  }
+
+  // ---- 3. 브라우저가 받는 매니페스트(서비스워커를 거친 판) ----
+  function loadImage(src) {
+    return new Promise(function (resolve) {
+      var img = new Image();
+      img.onload = function () { resolve({ src: src, w: img.naturalWidth, h: img.naturalHeight }); };
+      img.onerror = function () { resolve({ src: src, w: 0, h: 0 }); };
+      img.src = src + (src.indexOf('?') < 0 ? '?' : '&') + 'check=' + started;
+    });
+  }
+
+  function checkManifest() {
+    var link = document.querySelector('link[rel=manifest]');
+    var url = new URL(link.getAttribute('href'), location.href).href;
+    return fetch(url, { cache: 'no-store' }).then(function (res) {
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      return res.json();
+    }).then(function (m) {
+      var missing = [];
+      if (!m.name && !m.short_name) missing.push('이름');
+      if (!m.start_url) missing.push('시작 주소');
+      if (['standalone', 'fullscreen', 'minimal-ui'].indexOf(m.display) < 0) missing.push('표시 방식');
+      var icons = m.icons || [];
+      var png = icons.filter(function (i) { return /png/.test(i.type || i.src) && (i.purpose || 'any').indexOf('any') >= 0; });
+      var has = function (n) { return png.some(function (i) { return (i.sizes || '').split(' ').some(function (s) { return parseInt(s, 10) >= n; }); }); };
+      if (!has(192)) missing.push('PNG 192 아이콘');
+      if (!has(512)) missing.push('PNG 512 아이콘');
+      item('manifest', missing.length ? 'bad' : 'ok',
+        missing.length ? '매니페스트에 빠진 것: ' + missing.join(', ') : '매니페스트 정상',
+        '아이콘 ' + icons.map(function (i) { return i.src + '(' + i.sizes + ')'; }).join(', ') +
+        (missing.length && missing.join().indexOf('PNG') >= 0 ? ' — 예전 판이 남아 있습니다. 아래 「저장된 앱 파일 비우고 다시 받기」를 누르세요.' : ''));
+      return Promise.all(icons.filter(function (i) { return /png/.test(i.type || i.src); }).map(function (i) {
+        return loadImage(new URL(i.src, url).href).then(function (r) {
+          var want = parseInt(i.sizes, 10);
+          return { ok: r.w > 0 && (!want || r.w === want), text: i.src + ' ' + (r.w ? r.w + '×' + r.h : '못 받음') };
+        });
+      })).then(function (list) {
+        var bad = list.filter(function (x) { return !x.ok; });
+        item('icons', bad.length ? 'bad' : 'ok', bad.length ? '아이콘 일부를 못 받음' : '아이콘 받기 정상',
+          list.map(function (x) { return x.text; }).join(' · '));
+      });
+    }).catch(function (e) { item('manifest', 'bad', '매니페스트를 못 받음', String(e)); });
+  }
+
+  // ---- 4. 이미 설치됐나(크롬 안드로이드) ----
+  function checkInstalled() {
+    if (!navigator.getInstalledRelatedApps) return Promise.resolve();
+    return navigator.getInstalledRelatedApps().then(function (apps) {
+      if (apps && apps.length) {
+        item('installed', 'ok', '이미 설치돼 있습니다', '그래서 메뉴에 「설치」 대신 「열기」가 나옵니다. 앱 목록에서 맛핀을 찾으세요.');
+        results.alreadyInstalled = true;
+      }
+    }).catch(function () {});
+  }
+
+  // ---- 5. 설치 신호 ----
+  window.addEventListener('beforeinstallprompt', function (e) {
+    e.preventDefault();
+    bip = e;
+    document.getElementById('install').hidden = false;
+    item('signal', 'ok', '브라우저가 설치를 허락했습니다', ((Date.now() - started) / 1000).toFixed(1) + '초 만에 신호');
+    decide();
+  });
+  window.addEventListener('appinstalled', function () {
+    done = true;
+    item('signal', 'ok', '설치 완료', '홈 화면의 맛핀 아이콘으로 여세요.');
+    verdict('ok', '설치했습니다', '홈 화면이나 앱 목록에서 맛핀을 여세요.');
+  });
+
+  document.getElementById('install').addEventListener('click', function () {
+    if (!bip) return;
+    var e = bip;
+    done = true;
+    clearInterval(timer);
+    document.getElementById('install').hidden = true;
+    Promise.resolve(e.prompt()).then(function () { return e.userChoice; }).then(function (c) {
+      if (c.outcome === 'accepted') {
+        item('signal', 'ok', '설치를 시작했습니다', '잠시 뒤 홈 화면에 맛핀 아이콘이 생깁니다.');
+        verdict('ok', '설치를 시작했습니다', '홈 화면이나 앱 목록에서 맛핀을 여세요.');
+      } else {
+        item('signal', 'wait', '설치를 취소했습니다', '새로 고치면 다시 설치할 수 있습니다.');
+        verdict('wait', '설치를 취소했습니다', '새로 고친 뒤 다시 「지금 설치」를 누를 수 있습니다.');
+      }
+    }, function () {
+      item('signal', 'bad', '설치 창을 띄우지 못했습니다', '새로 고친 뒤 다시 눌러 주세요.');
+    });
+  });
+
+  function decide() {
+    if (done) return;
+    if (standalone) { verdict('ok', '이미 앱으로 열려 있습니다', '설치가 끝난 상태입니다.'); return; }
+    if (inApp) { verdict('bad', '카카오톡 안 화면입니다', '⋮ › 다른 브라우저로 열기로 나간 뒤 이 페이지를 다시 여세요.'); return; }
+    if (results.alreadyInstalled) { verdict('ok', '이미 설치돼 있습니다', '앱 목록에서 맛핀을 찾아 여세요.'); return; }
+    if (bip) { verdict('ok', '설치할 수 있습니다', '아래 「지금 설치」를 누르세요.'); return; }
+    if (results.manifest === 'bad' || results.icons === 'bad') {
+      verdict('bad', '예전에 받아 둔 파일이 설치를 막고 있습니다', '「저장된 앱 파일 비우고 다시 받기」를 누른 뒤 다시 점검하세요.'); return;
+    }
+    if (isIOS) { verdict('ok', '아이폰은 사파리 공유 버튼에서 설치합니다', '공유 › 홈 화면에 추가를 누르세요.'); return; }
+    if (Date.now() - started < 12000) { verdict('wait', '확인하는 중…', '브라우저의 설치 신호를 기다립니다. 화면을 한 번 눌러 주세요.'); return; }
+    if (samsung) {
+      verdict('wait', '조건은 모두 맞습니다', '삼성 인터넷은 신호를 따로 보내지 않을 수 있습니다. 주소창의 ⤓ 아이콘이나 ≡ › 현재 페이지 추가 › 홈 화면을 쓰세요.');
+    } else {
+      verdict('bad', '조건은 맞는데 브라우저가 설치 신호를 보내지 않았습니다', '아래 결과를 복사해 보내 주세요. 「저장된 앱 파일 비우고 다시 받기」를 한 번 해 보는 것도 좋습니다.');
+    }
+  }
+
+  // ---- 초기화 ----
+  document.getElementById('reset').addEventListener('click', function () {
+    var btn = this;
+    btn.disabled = true;
+    btn.textContent = '비우는 중…';
+    var jobs = [];
+    if ('serviceWorker' in navigator) {
+      jobs.push(navigator.serviceWorker.getRegistrations().then(function (regs) {
+        return Promise.all(regs.filter(function (r) { return r.scope.indexOf(SCOPE) === 0; })
+          .map(function (r) { return r.unregister(); }));
+      }));
+    }
+    if (window.caches) {
+      // 맛핀이 만드는 캐시만 지운다: workbox 미리 받기(이름에 범위가 붙음)와 데이터 캐시.
+      jobs.push(caches.keys().then(function (keys) {
+        return Promise.all(keys.filter(function (k) {
+          return k === 'matpin-data' || (k.indexOf('workbox-precache') === 0 && k.indexOf(SCOPE) >= 0);
+        }).map(function (k) { return caches.delete(k); }));
+      }));
+    }
+    Promise.all(jobs).then(function () {
+      // 앱 첫 화면을 열면 새 서비스워커가 새 파일로 다시 받는다.
+      location.replace('./?fresh=' + Date.now());
+    }, function () { location.reload(); });
+  });
+
+  // ---- 복사 ----
+  document.getElementById('copy').addEventListener('click', function () {
+    var ta = document.getElementById('report');
+    var btn = this;
+    function ok() { btn.textContent = '복사됨'; setTimeout(function () { btn.textContent = '결과 복사'; }, 1400); }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(ta.value).then(ok, function () { ta.select(); document.execCommand('copy'); ok(); });
+    } else { ta.select(); document.execCommand('copy'); ok(); }
+  });
+
+  Promise.all([checkWorker(), checkManifest(), checkInstalled()]).then(function () {
+    if (!bip) item('signal', 'wait', '설치 신호 기다리는 중', '화면을 한 번 누르면 빨라질 수 있습니다.');
+    decide();
+  });
+  // 신호가 늦게 올 수 있어 잠시 더 지켜본다.
+  var ticks = 0;
+  var timer = setInterval(function () {
+    ticks++;
+    checkWorker();
+    if (!bip && ticks >= 6) item('signal', 'bad', '설치 신호가 오지 않았습니다', ((Date.now() - started) / 1000).toFixed(0) + '초 기다림');
+    decide();
+    if (bip || ticks >= 6) clearInterval(timer);
+  }, 2500);
+})();
+</script>
+</body>
+</html>
