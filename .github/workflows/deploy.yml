@@ -1,8 +1,9 @@
 name: 배포
 
-# main 에 올라가면 두 곳으로 내보낸다.
-#   새 주소 https://matpin.pages.dev/   — Cloudflare Pages (도메인 맨 앞, VITE_BASE=/)
-#   옛 주소 https://0101-commits.github.io/menu/ — GitHub Pages (VITE_BASE=/menu/). 새 주소로 넘길 때까지 같은 앱을 둔다.
+# main 에 올라가면 내보낸다.
+#   앱    https://matpin.pages.dev/  — Cloudflare Pages (도메인 맨 앞, VITE_BASE=/)
+#   옛 주소 https://0101-commits.github.io/menu/ — GitHub Pages. 앱 대신 redirect/ 를 올려 새 주소로 넘긴다.
+#          (방문기록은 #carry= 로 따라가고, 옛 서비스워커는 redirect/sw.js 가 걷어 낸다)
 # 데이터(public/data/*.json)는 레포에 커밋돼 있으므로 여기서 수집하지 않는다.
 # 수집은 sync-myplace.yml 이 주 1회 돌려 PR 로 올린다.
 
@@ -22,8 +23,13 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  build:
+  # 레포 Secrets 에 CLOUDFLARE_API_TOKEN(Cloudflare Pages 편집 권한)과 CLOUDFLARE_ACCOUNT_ID 가 있어야 올라간다.
+  # 토큰이 없으면 시험·빌드까지만 하고 경고를 남긴다 — 그동안은 로컬에서
+  # `npm run build && npx wrangler pages deploy dist --project-name matpin --branch main` 로 올린다.
+  app:
     runs-on: ubuntu-latest
+    env:
+      HAS_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN != '' }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
@@ -44,56 +50,8 @@ jobs:
       - name: 빌드
         run: npm run build
         env:
-          VITE_BASE: /menu/
-          # Worker 를 띄웠다면 레포 Variables 에 넣는다. 없으면 온디맨드 평점만 꺼진다.
-          VITE_RATINGS_API: ${{ vars.VITE_RATINGS_API }}
-          VITE_GOOGLE_RATINGS: ${{ vars.VITE_GOOGLE_RATINGS }}
-
-      - uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5.0.0
-
-      - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3.0.1
-        with:
-          path: dist
-
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - id: deployment
-        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4.0.5
-
-  # 새 주소. 레포 Secrets 에 CLOUDFLARE_API_TOKEN(Cloudflare Pages 편집 권한)과 CLOUDFLARE_ACCOUNT_ID 가 있어야 올라간다.
-  # 토큰이 없으면 경고만 남기고 넘어간다 — 그동안은 로컬에서 `npx wrangler pages deploy dist --project-name matpin` 로 올린다.
-  cloudflare:
-    needs: build
-    runs-on: ubuntu-latest
-    env:
-      HAS_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN != '' }}
-    steps:
-      - if: env.HAS_TOKEN != 'true'
-        run: echo "::warning::CLOUDFLARE_API_TOKEN 이 없어 matpin.pages.dev 는 이번 배포에서 갱신되지 않았습니다."
-
-      - if: env.HAS_TOKEN == 'true'
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-
-      - if: env.HAS_TOKEN == 'true'
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        with:
-          node-version: 24
-          check-latest: true
-          cache: npm
-
-      - if: env.HAS_TOKEN == 'true'
-        run: npm ci
-
-      - name: 빌드(도메인 맨 앞)
-        if: env.HAS_TOKEN == 'true'
-        run: npm run build
-        env:
           VITE_BASE: /
+          # Worker 를 띄웠다면 레포 Variables 에 넣는다. 없으면 온디맨드 평점만 꺼진다.
           VITE_RATINGS_API: ${{ vars.VITE_RATINGS_API }}
           VITE_GOOGLE_RATINGS: ${{ vars.VITE_GOOGLE_RATINGS }}
 
@@ -103,3 +61,34 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - if: env.HAS_TOKEN != 'true'
+        run: echo "::warning::CLOUDFLARE_API_TOKEN 이 없어 matpin.pages.dev 는 이번 배포에서 갱신되지 않았습니다."
+
+  # 옛 주소: 넘김 페이지만 올린다. 없는 경로(옛 setup.html·깊은 링크)도 같은 자리로 넘기도록 404.html 로도 둔다.
+  old-address:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: 넘김 페이지 묶기
+        run: |
+          mkdir -p _site
+          cp redirect/index.html redirect/sw.js _site/
+          cp redirect/index.html _site/404.html
+
+      - uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5.0.0
+
+      - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3.0.1
+        with:
+          path: _site
+
+  deploy:
+    needs: old-address
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4.0.5
