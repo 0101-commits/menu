@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>맛핀 · 새 주소로 옮겼습니다</title>
+<link rel="canonical" href="https://matpin.pages.dev/">
+<script>
+  // 옛 주소(0101-commits.github.io/menu/…)를 같은 자리의 새 주소로 바로 넘긴다.
+  // 방문기록·화면 설정은 이 주소의 브라우저 저장소에만 있으므로, 앱 첫 화면으로 갈 때는
+  // 주소 뒤 #carry= 에 실어 보낸다(# 뒤는 서버로 가지 않는다). 새 앱의 importCarried() 가 받아 합친다.
+  (function () {
+    var NEW = 'https://matpin.pages.dev';
+    var path = location.pathname.replace(/^\/menu(\/|$)/, '/');
+    var hash = location.hash;
+    if (path === '/' || path === '/index.html') {
+      path = '/';
+      try {
+        var carry = {};
+        var v = localStorage.getItem('matpin-visits');
+        var s = localStorage.getItem('matpin-color-scheme');
+        if (v) carry.v = JSON.parse(v);
+        if (s) carry.s = s;
+        if (carry.v || carry.s) hash = '#carry=' + encodeURIComponent(JSON.stringify(carry));
+      } catch (e) { /* 저장소를 못 읽으면 기록 없이 넘어간다 */ }
+    }
+    location.replace(NEW + path + location.search + hash);
+  })();
+</script>
+<noscript><meta http-equiv="refresh" content="0; url=https://matpin.pages.dev/"></noscript>
+<style>
+  body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #f4f5f7; color: #1b1d21;
+         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif; text-align: center; }
+  a { color: #8c2019; font-weight: 700; }
+</style>
+</head>
+<body>
+  <p>맛핀이 새 주소로 옮겼습니다.<br><a href="https://matpin.pages.dev/">matpin.pages.dev</a> 로 이동합니다.</p>
+</body>
+</html>

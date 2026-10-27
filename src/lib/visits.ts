@@ -123,14 +123,26 @@ function write(visits: Visits): boolean {
  * localStorage 는 주소마다 따로라서 이렇게 들고 오지 않으면 기록이 옛 주소에 남는다. # 뒤는 서버로 가지 않는다.
  * 받은 기록은 지금 기록과 합치고(더 최신 방문 우선) 주소창에서 지운다. 화면을 그리기 전에 한 번 부른다.
  */
-export function importCarried(): ImportSummary | null {
+export const CARRY_FROM = 'https://0101-commits.github.io/';
+
+export function importCarried(now = new Date()): ImportSummary | null {
   if (typeof window === 'undefined' || !location.hash.startsWith('#carry=')) return null;
   let summary: ImportSummary | null = null;
   try {
-    const payload: unknown = JSON.parse(decodeURIComponent(location.hash.slice('#carry='.length)));
+    // 아무나 #carry= 링크를 만들어 남의 기록에 끼워 넣지 못하게, 옛 주소에서 넘어온 경우만 받는다.
+    // 옛 주소의 넘김 페이지(redirect/index.html)가 location.replace 로 보내므로 referrer 가 옛 주소다.
+    if (!document.referrer.startsWith(CARRY_FROM)) throw new Error('not from old origin');
+    const raw = location.hash.slice('#carry='.length);
+    if (raw.length > MAX_IMPORT_BYTES) throw new Error('too large');
+    const payload: unknown = JSON.parse(decodeURIComponent(raw));
     if (isRecord(payload)) {
       if (payload.v !== undefined) {
-        const merged = mergeVisits(read(), validateVisits(payload.v));
+        // 미래 시각은 "더 최신" 으로 늘 이겨 버리므로 버린다(하루 여유).
+        const limit = now.getTime() + 86_400_000;
+        const incoming = Object.fromEntries(
+          Object.entries(validateVisits(payload.v)).filter(([, visit]) => Date.parse(visit.at) <= limit),
+        );
+        const merged = mergeVisits(read(), incoming);
         if (write(merged.visits)) summary = merged.summary;
       }
       if (payload.s === 'dark' || payload.s === 'light') {

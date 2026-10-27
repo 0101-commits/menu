@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { importCarried, mergeVisits, parseVisitsJson, serializeVisits, validateVisits, VISITS_KEY, type Visits } from './visits';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { CARRY_FROM, importCarried, mergeVisits, parseVisitsJson, serializeVisits, validateVisits, VISITS_KEY, type Visits } from './visits';
 
 const oldVisit = { at: '2026-09-01T00:00:00.000Z', note: '기존 메모' };
 const newVisit = { at: '2026-09-20T00:00:00.000Z' };
@@ -52,9 +52,12 @@ describe('mergeVisits', () => {
 });
 
 describe('옛 주소에서 넘어온 기록', () => {
+  const setReferrer = (value: string) => Object.defineProperty(document, 'referrer', { value, configurable: true });
   const carry = (payload: unknown) => {
     window.history.replaceState(null, '', `/?p=1#carry=${encodeURIComponent(JSON.stringify(payload))}`);
   };
+  beforeEach(() => setReferrer(CARRY_FROM));
+  afterEach(() => setReferrer(''));
 
   it('방문기록을 합치고 화면 설정을 옮긴 뒤 주소창에서 지운다', () => {
     localStorage.setItem(VISITS_KEY, JSON.stringify({ a: oldVisit }));
@@ -73,6 +76,22 @@ describe('옛 주소에서 넘어온 기록', () => {
     expect(importCarried()).toBeNull();
     expect(JSON.parse(localStorage.getItem(VISITS_KEY)!)).toEqual({ a: oldVisit });
     expect(window.location.hash).toBe('');
+  });
+
+  it('옛 주소가 아닌 곳에서 온 링크는 받지 않는다', () => {
+    localStorage.setItem(VISITS_KEY, JSON.stringify({ a: oldVisit }));
+    setReferrer('https://evil.example/');
+    carry({ v: { a: { at: newVisit.at, note: '끼워 넣은 메모' } }, s: 'dark' });
+    expect(importCarried()).toBeNull();
+    expect(JSON.parse(localStorage.getItem(VISITS_KEY)!)).toEqual({ a: oldVisit });
+    expect(window.location.hash).toBe('');
+  });
+
+  it('미래 시각 기록은 버린다', () => {
+    localStorage.setItem(VISITS_KEY, JSON.stringify({ a: oldVisit }));
+    carry({ v: { a: { at: '2099-01-01T00:00:00.000Z', note: '덮어쓰기' }, b: newVisit } });
+    importCarried(new Date('2026-10-27T00:00:00Z'));
+    expect(JSON.parse(localStorage.getItem(VISITS_KEY)!)).toEqual({ a: oldVisit, b: newVisit });
   });
 
   it('#carry= 가 없으면 아무것도 하지 않는다', () => {
