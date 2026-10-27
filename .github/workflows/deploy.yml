@@ -23,7 +23,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # 레포 Secrets 에 CLOUDFLARE_API_TOKEN(Cloudflare Pages 편집 권한)과 CLOUDFLARE_ACCOUNT_ID 가 있어야 올라간다.
+  # 레포 Secrets 에 CLOUDFLARE_API_TOKEN(계정 › Cloudflare Pages › 편집 권한)이 있어야 올라간다.
   # 토큰이 없으면 시험·빌드까지만 하고 경고를 남긴다 — 그동안은 로컬에서
   # `npm run build && npx wrangler pages deploy dist --project-name matpin --branch main` 로 올린다.
   app:
@@ -60,7 +60,9 @@ jobs:
         run: npx --yes wrangler@4.153.0 pages deploy dist --project-name matpin --branch main --commit-hash "$GITHUB_SHA"
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          # 계정 ID 는 비밀이 아니다(대시보드 주소에 그대로 보인다). 레포 Secrets 의 옛 CLOUDFLARE_ACCOUNT_ID 는
+          # 다른 값이라 code 7003(Could not route) 으로 실패해서 여기 적는다. baldr0001 계정 = wrangler whoami 확인값.
+          CLOUDFLARE_ACCOUNT_ID: a98aa3ecdfb848ca568363a2c0b52c80
 
       - if: env.HAS_TOKEN != 'true'
         run: echo "::warning::CLOUDFLARE_API_TOKEN 이 없어 matpin.pages.dev 는 이번 배포에서 갱신되지 않았습니다."
